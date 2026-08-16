@@ -17,6 +17,9 @@ Options:
   --http-port N       local HTTP replica (default 8014)
   --stratum-port N    local stratum relay (default 1474)
   --replica-only      HTTP only, no local stratum
+  --announce-host H   public host to register with the book
+  --announce-url URL  book announce endpoint
+  --role join|pool|solo
   --help
 `;
 
@@ -37,6 +40,13 @@ export function parseNodeArgs(argv = process.argv) {
     listenHttp: Number(flag(argv, '--http-port', '8014')),
     listenStratum: Number(flag(argv, '--stratum-port', '1474')),
     replicaOnly: argv.includes('--replica-only'),
+    announceHost: flag(argv, '--announce-host', process.env.GNFP_ANNOUNCE_HOST || ''),
+    announceUrl: flag(
+      argv,
+      '--announce-url',
+      process.env.GNFP_ANNOUNCE_URL || 'https://explorer.restoreprivacy.online/api/nodes',
+    ),
+    role: flag(argv, '--role', 'join'),
   };
 }
 
@@ -54,6 +64,21 @@ export function main(argv = process.argv) {
     `gnfp-node ${VERSION} → hub=${cfg.hubHost}:${cfg.hubStratum} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
   );
   startJoinNode({ ...joinConfig(), ...cfg });
+  if (cfg.announceHost) {
+    const beat = () => {
+      fetch(cfg.announceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: cfg.announceHost,
+          port: cfg.listenStratum,
+          role: cfg.role,
+        }),
+      }).catch(() => {});
+    };
+    beat();
+    setInterval(beat, 30_000);
+  }
   return { cfg };
 }
 

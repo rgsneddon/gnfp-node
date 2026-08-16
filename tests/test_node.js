@@ -32,4 +32,9 @@ test('parse args default to Germany book', () => {
   assert.equal(j.coin, 'GNFP');
   assert.equal(j.version, VERSION);
   assert.match(j.hub, /de\.restoreprivacy\.online:1474/);
+  const ann = parseNodeArgs([
+    'node', 'node.js', '--announce-host', 'mynode.example', '--role', 'pool',
+  ]);
+  assert.equal(ann.announceHost, 'mynode.example');
+  assert.equal(ann.role, 'pool');
 });

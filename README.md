@@ -22,7 +22,18 @@ HTTP replica on `0.0.0.0:8014`. Local stratum on `0.0.0.0:1474` (relays to the b
 --http-port N       local HTTP (default 8014)
 --stratum-port N    local stratum relay (default 1474)
 --replica-only      HTTP only, no local stratum
+--announce-host H   public host the book should count as online
+--announce-url URL  default https://explorer.restoreprivacy.online/api/nodes
+--role join|pool|solo
 --help
+```
+
+Third-party nodes, other pools, and solo miners check in with a POST to `/api/nodes` so explorer **Nodes online** includes them:
+
+```
+curl -X POST https://explorer.restoreprivacy.online/api/nodes \
+  -H 'content-type: application/json' \
+  -d '{"host":"mynode.example","port":1474,"role":"join"}'
 ```
 
 ## Install packs

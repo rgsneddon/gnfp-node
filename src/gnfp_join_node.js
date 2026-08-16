@@ -96,6 +96,30 @@ export function createJoinHttpServer({
         return;
       }
       if (url === '/api/nodes' || url === '/gnfp/api/nodes') {
+        if (req.method === 'POST') {
+          const chunks = [];
+          req.on('data', (c) => chunks.push(c));
+          req.on('end', async () => {
+            try {
+              const raw = Buffer.concat(chunks).toString('utf8') || '{}';
+              const dest = String(
+                process.env.GNFP_ANNOUNCE_URL
+                || String(hubHttp || '').replace(/\/api\/network\/?$/, '/api/nodes')
+                || 'https://explorer.restoreprivacy.online/api/nodes',
+              );
+              const res = await fetchImpl(dest, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: raw,
+              });
+              const json = await res.json();
+              ok(res.status || 200, json);
+            } catch (err) {
+              ok(502, { ok: false, reason: 'announce_forward_failed', error: String(err?.message || err) });
+            }
+          });
+          return;
+        }
         ok(200, { ok: true, coin: GNFP_TICKER, nodes: listGnfpNodes() });
         return;
       }
