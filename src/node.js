@@ -1,48 +1,45 @@
 #!/usr/bin/env node
 /**
- * gnfp-node — join the Germany $GNFP book. Not a second chain.
+ * gnfp-node — equal Chronoflux book. Any node can run alone.
  */
 import { startJoinNode, joinConfig } from './gnfp_join_node.js';
+import { startEqualNode } from './equal_book.js';
 import { GNFP_BOOK } from './chronoflux_chain.js';
 import { hubBaseUrl } from './hub_http.js';
 import { defaultDataDir } from './node_store.js';
 
-export const VERSION = '1.0.3';
+export const VERSION = '1.0.4';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
-export const HELP = `gnfp-node ${VERSION} — join the $GNFP Germany book
+export const HELP = `gnfp-node ${VERSION} — equal $GNFP Chronoflux node
 
 Usage:
   gnfp-node
 
-The emission book is hardcoded in the chain as ${GNFP_BOOK.id}
-(${GNFP_BOOK.stratum}). It is not an operator flag. --pull only changes
-where this process dials (loopback tests). It does not retarget the book.
+Every node is a full book of the same chain (${GNFP_BOOK.id}).
+Germany (${GNFP_BOOK.stratum}) is a well-known peer, not a required master.
+If that peer drops, this node keeps the tip, accepts miners, and
+perpetuates the chain. Miners connect here directly.
 
-This process pulls tip + incremental sealed blocks from the master book
-on :1474, verify-before-adopt, and keeps following the tip. A found block
-is sealed into the chain; after 72s it is confirmed and stays held.
-It does not start a second emission book and must not restore 50-GNFP
-or 3000 ms blocks.
+--replica-only is pull-only (no local stratum, no local settle).
+Default is an equal book: local stratum + HTTP + persist.
 
 TLS is the shipped default. --notls is local plaintext only.
-
-Verify-before-adopt: a mutated book, a same-height competing tip, or a
-shorter/rollback book is rejected. After restart the node resumes its last
-adopted tip (not height 0).
+Verify-before-adopt still rejects mutated / same-height / rollback books.
 
 Options:
-  --pull HOST:PORT    dial address only (default ${DEFAULT_HUB})
-  --http-port N       local HTTP replica (default 8014)
-  --stratum-port N    local stratum relay (default 1474)
-  --replica-only      HTTP only, no local stratum (sync + serve pull)
-  --data-dir PATH     persist adopted tip (default ~/.gnfp-node)
-  --poll-ms N         tip poll interval (default 4000)
-  --announce-host H   public host to register with the book
-  --announce-url URL  book announce endpoint
+  --peer HOST:PORT    optional peer to sync from (default ${DEFAULT_HUB})
+  --pull HOST:PORT    same as --peer (dial only; does not change chain id)
+  --http-port N       local HTTP book (default 8014)
+  --stratum-port N    local miner stratum / book (default 1474)
+  --replica-only      sync/serve only — do not settle locally
+  --data-dir PATH     persist the book (default ~/.gnfp-node)
+  --poll-ms N         peer poll interval (default 4000)
+  --announce-host H   public host to register
+  --announce-url URL  announce endpoint
   --role join|pool|solo
-  --notls             local plaintext only (loopback / tests)
-  --print-config      JSON config (coin=GNFP, hub, TLS)
+  --notls             local plaintext only
+  --print-config      JSON (coin=GNFP, equalNode, TLS)
   --help
 `;
 
@@ -54,7 +51,7 @@ function flag(argv, name, fallback) {
 
 export function parseNodeArgs(argv = process.argv, env = process.env) {
   const tls = !argv.includes('--notls');
-  const pull = flag(argv, '--pull', env.GNFP_PULL || '');
+  const pull = flag(argv, '--peer', flag(argv, '--pull', env.GNFP_PULL || env.GNFP_PEER || ''));
   let pullHost = GNFP_BOOK.host;
   let pullPort = GNFP_BOOK.port;
   if (pull) {
@@ -82,9 +79,11 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
       '--announce-url',
       env.GNFP_ANNOUNCE_URL || 'https://explorer.restoreprivacy.online/api/nodes',
     ),
-    role: flag(argv, '--role', 'join'),
+    role: flag(argv, '--role', 'book'),
     tls,
     verifyBeforeAdopt: true,
+    equalNode: !argv.includes('--replica-only'),
+    emissionBook: !argv.includes('--replica-only'),
   };
 }
 
@@ -102,19 +101,24 @@ export function main(argv = process.argv) {
       hub: `${cfg.hubHost}:${cfg.hubStratum}`,
       tls: cfg.tls,
       verifyBeforeAdopt: true,
-      emissionBook: false,
+      equalNode: cfg.equalNode,
+      emissionBook: cfg.emissionBook,
     })}\n`);
     return 0;
   }
   console.log(
-    `gnfp-node ${VERSION} → hub=${cfg.hubHost}:${cfg.hubStratum} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
+    `gnfp-node ${VERSION} equal=${cfg.equalNode} peer=${cfg.pullHost}:${cfg.pullPort} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
   );
-  startJoinNode({
-    ...joinConfig(),
-    ...cfg,
-    hubHost: cfg.pullHost,
-    hubStratum: cfg.pullPort,
-  });
+  if (cfg.replicaOnly) {
+    startJoinNode({
+      ...joinConfig(),
+      ...cfg,
+      hubHost: cfg.pullHost,
+      hubStratum: cfg.pullPort,
+    });
+  } else {
+    startEqualNode(cfg);
+  }
   if (cfg.announceHost) {
     const beat = () => {
       fetch(cfg.announceUrl, {

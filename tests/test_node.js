@@ -39,7 +39,8 @@ test('parse args default to Germany book', () => {
   assert.equal(j.tls, true);
   assert.match(String(j.hubHttp), /de\.restoreprivacy\.online:1474/);
   assert.equal(j.verifyBeforeAdopt, true);
-  assert.equal(j.emissionBook, false);
+  assert.equal(j.equalNode, true);
+  assert.equal(j.emissionBook, true);
   const ann = parseNodeArgs([
     'node', 'node.js', '--announce-host', 'mynode.example', '--role', 'pool',
   ]);

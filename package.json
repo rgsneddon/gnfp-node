@@ -1,7 +1,7 @@
 {
   "name": "gnfp-node",
-  "version": "1.0.3",
-  "description": "Third-party gnfp-node: seed-sync the Germany master book (verify-before-adopt)",
+  "version": "1.0.4",
+  "description": "Equal Chronoflux gnfp-node: any node can run the book alone",
   "type": "module",
   "bin": {
     "gnfp-node": "src/node.js"

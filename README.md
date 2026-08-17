@@ -1,11 +1,11 @@
 # gnfp-node
 
-Run **your own $GNFP node**. It seed-syncs the **Germany master book** (`de.restoreprivacy.online:1474`), verify-before-adopt, and keeps following the live tip. It is **not** a second emission book.
+Run **your own $GNFP node**. Every node is an **equal Chronoflux book** of the same chain. Germany is a well-known peer, not a required master. If that peer drops, this node keeps the tip, accepts miners, and continues the chain.
 
-**Pin:** `1.0.2`  
+**Pin:** `1.0.4`  
 **Coin:** GNFP  
-**Book (immutable):** `gnfp-germany-book-v1` at `de.restoreprivacy.online:1474`  
-TLS default; `--notls` is local plaintext only. The book is hardcoded in the chain — not an env, flag, or operator catalog.
+**Chain id:** `gnfp-germany-book-v1` (immutable). Hosts are peers.  
+TLS default; `--notls` is local plaintext only.
 
 - Explorer: https://explorer.restoreprivacy.online
 - Pool: https://gnfp.restoreprivacy.online
@@ -15,15 +15,13 @@ TLS default; `--notls` is local plaintext only. The book is hardcoded in the cha
 
 | This node does | This node does not |
 |---|---|
-| Pull tip + incremental headers/blocks from Germany `:1474` | Start a second chain or mint GNFP |
-| Hold each found/confirmed block as an immutable sealed row | Let an operator retarget or rewrite the book |
-| Verify-before-adopt (reject mutated / same-height fork / rollback) | Restore 50-GNFP or 3000 ms blocks |
-| Persist the last adopted tip and resume after restart | Dump the full ~30k-block book every poll |
-| Optionally relay stratum to the Germany book | Replace Helsinki as a mining book |
+| Run a full local book (HTTP + stratum) of chain `gnfp-germany-book-v1` | Require Germany to stay online |
+| Sync from any peer, then continue alone if the peer drops | Start a different genesis / 50-GNFP book |
+| Accept miners directly on this node | Relay-only to a master |
+| Hold found/confirmed blocks as sealed rows | Let an operator rewrite a sealed height |
+| Verify-before-adopt on peer updates | Dump the full ~30k-block book every poll |
 
-After it synchronises it **hosts a replica of that same book** on its local HTTP port (`/api/tip`, `/api/headers`, `/api/blocks`). Other nodes can pull from it. It does **not** become a second emission book: it cannot mint, rewrite history, or retarget the chain.
-
-`--replica-only` is HTTP replica only (no local stratum). Default `join` also relays miners to Germany.
+`--replica-only` is pull-only. Default is an **equal book**.
 
 ## Install
 
@@ -42,7 +40,7 @@ GitHub Releases: https://github.com/rgsneddon/gnfp-node/releases
 
 ## Run your own node
 
-The Germany book is already in the binary. Just run:
+Run a full equal node (local stratum + HTTP + persist):
 
 ```bash
 node src/node.js
