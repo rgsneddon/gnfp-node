@@ -4,13 +4,16 @@
  */
 import { startJoinNode, joinConfig } from './gnfp_join_node.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 export const DEFAULT_HUB = 'de.restoreprivacy.online:1474';
 
 export const HELP = `gnfp-node ${VERSION} — join the $GNFP Germany book
 
 Usage:
   gnfp-node --hub de.restoreprivacy.online:1474
+
+Verify-before-adopt: a replica will not take a mutated or same-height
+competing book. TLS is the shipped default.
 
 Options:
   --hub HOST:PORT     book stratum (default ${DEFAULT_HUB})
@@ -20,6 +23,7 @@ Options:
   --announce-host H   public host to register with the book
   --announce-url URL  book announce endpoint
   --role join|pool|solo
+  --notls             local plaintext stratum only
   --help
 `;
 
@@ -36,7 +40,7 @@ export function parseNodeArgs(argv = process.argv) {
     hub,
     hubHost: hubHost || 'de.restoreprivacy.online',
     hubStratum: Number(hubPort || 1474),
-    hubHttp: `http://${hubHost || 'de.restoreprivacy.online'}:${Number(hubPort || 1474)}/api/network`,
+    hubHttp: `https://${hubHost || 'de.restoreprivacy.online'}/api/network`,
     listenHttp: Number(flag(argv, '--http-port', '8014')),
     listenStratum: Number(flag(argv, '--stratum-port', '1474')),
     replicaOnly: argv.includes('--replica-only'),
@@ -47,6 +51,7 @@ export function parseNodeArgs(argv = process.argv) {
       process.env.GNFP_ANNOUNCE_URL || 'https://explorer.restoreprivacy.online/api/nodes',
     ),
     role: flag(argv, '--role', 'join'),
+    tls: !argv.includes('--notls'),
   };
 }
 

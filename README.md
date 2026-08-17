@@ -1,8 +1,9 @@
 # gnfp-node
 
-Join the single $GNFP book in Germany. This process relays stratum and serves a local HTTP replica of the book. It does not start a second chain.
+Join the single $GNFP book in Germany (**gnfp-node 1.0.1**). This process relays stratum and serves a local HTTP replica of the book. It does not start a second chain. Verify-before-adopt: a replica will not take a mutated or same-height competing book.
 
-- Book: `de.restoreprivacy.online:1474`
+- Book: `de.restoreprivacy.online:1474` (TLS by default; `--notls` for local plaintext)
+- Verify-before-adopt: a replica will not take a mutated or same-height competing book
 - Also join via `sg.restoreprivacy.online:1474` or `hel.restoreprivacy.online:1474`
 - Pool: https://gnfp.restoreprivacy.online
 - Explorer: https://explorer.restoreprivacy.online
@@ -13,6 +14,7 @@ Needs Node.js 18+.
 
 ```
 node src/node.js --hub de.restoreprivacy.online:1474
+# add --notls only for a local plaintext loopback
 ```
 
 HTTP replica on `0.0.0.0:8014`. Local stratum on `0.0.0.0:1474` (relays to the book).

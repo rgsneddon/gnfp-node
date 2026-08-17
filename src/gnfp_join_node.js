@@ -4,13 +4,16 @@
  */
 import http from 'http';
 import net from 'net';
+import tls from 'tls';
 import { GNFP_TICKER, listGnfpNodes, buildMinerCommand } from './gnfp_nodes.js';
+import { adoptReplicaBook } from './chronoflux_chain.js';
+import { defaultUseTls } from './stratum_tls.js';
 
 export const DEFAULT_HUB_HOST = 'de.restoreprivacy.online';
 export const DEFAULT_HUB_STRATUM = 1474;
-export const DEFAULT_HUB_HTTP = 'http://de.restoreprivacy.online:1474/api/network';
+export const DEFAULT_HUB_HTTP = 'https://de.restoreprivacy.online/api/network';
 
-export function joinConfig(env = process.env) {
+export function joinConfig(env = process.env, argv = process.argv) {
   return {
     hubHost: env.GNFP_HUB_HOST || DEFAULT_HUB_HOST,
     hubStratum: Number(env.GNFP_HUB_STRATUM || DEFAULT_HUB_STRATUM),
@@ -18,6 +21,7 @@ export function joinConfig(env = process.env) {
     listenStratum: Number(env.GNFP_STRATUM_PORT || 1474),
     listenHttp: Number(env.GNFP_HTTP_PORT || 8014),
     replicaOnly: env.GNFP_REPLICA_ONLY === '1',
+    tls: defaultUseTls(argv, env),
   };
 }
 
@@ -33,8 +37,11 @@ export function getReplicaBook() {
 }
 
 /** Pipe a miner TCP socket to the single Germany stratum book. */
-export function relayStratumSocket(minerSock, { hubHost, hubStratum } = joinConfig()) {
-  const hub = net.connect(Number(hubStratum) || DEFAULT_HUB_STRATUM, hubHost);
+export function relayStratumSocket(minerSock, { hubHost, hubStratum, tls: useTls } = joinConfig()) {
+  const port = Number(hubStratum) || DEFAULT_HUB_STRATUM;
+  const hub = useTls
+    ? tls.connect({ host: hubHost, port, rejectUnauthorized: false, requestCert: false })
+    : net.connect(port, hubHost);
   const drop = () => {
     try { minerSock.destroy(); } catch { /* ignore */ }
     try { hub.destroy(); } catch { /* ignore */ }
@@ -87,8 +94,19 @@ export function createJoinHttpServer({
         req.on('end', () => {
           try {
             const book = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-            setReplicaBook(book);
-            ok(200, { ok: true, coin: GNFP_TICKER, synced: true, tip: book.tip ?? book.height });
+            const adopted = adoptReplicaBook(getReplicaBook(), book);
+            if (!adopted.ok) {
+              ok(409, { ok: false, reason: adopted.reason, coin: GNFP_TICKER });
+              return;
+            }
+            setReplicaBook(adopted.book);
+            ok(200, {
+              ok: true,
+              coin: GNFP_TICKER,
+              synced: true,
+              tip: adopted.book.tip ?? adopted.book.height,
+              verifyBeforeAdopt: true,
+            });
           } catch (err) {
             ok(400, { ok: false, reason: 'bad_sync', error: String(err?.message || err) });
           }

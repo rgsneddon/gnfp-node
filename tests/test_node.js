@@ -16,12 +16,16 @@ test('cli help names GNFP join node', () => {
   assert.match(r.stdout, /GNFP/);
   assert.match(r.stdout, /1474/);
   assert.match(r.stdout, /gnfp-node/);
+  assert.match(r.stdout, /TLS is the shipped default/);
+  assert.match(r.stdout, /Verify-before-adopt/);
+  assert.match(r.stdout, /--notls/);
 });
 
 test('parse args default to Germany book', () => {
   const cfg = parseNodeArgs(['node', 'node.js']);
   assert.equal(cfg.hubHost, 'de.restoreprivacy.online');
   assert.equal(cfg.hubStratum, 1474);
+  assert.equal(cfg.tls, true);
   assert.equal(cfg.listenHttp, 8014);
   const printed = spawnSync(process.execPath, ['src/node.js', '--print-config'], {
     cwd: root,
