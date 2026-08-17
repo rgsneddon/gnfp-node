@@ -21,7 +21,9 @@ TLS default; `--notls` is local plaintext only. The book is hardcoded in the cha
 | Persist the last adopted tip and resume after restart | Dump the full ~30k-block book every poll |
 | Optionally relay stratum to the Germany book | Replace Helsinki as a mining book |
 
-`--replica-only` is HTTP sync + pull only (no local stratum). Default `join` also relays miners to the book.
+After it synchronises it **hosts a replica of that same book** on its local HTTP port (`/api/tip`, `/api/headers`, `/api/blocks`). Other nodes can pull from it. It does **not** become a second emission book: it cannot mint, rewrite history, or retarget the chain.
+
+`--replica-only` is HTTP replica only (no local stratum). Default `join` also relays miners to Germany.
 
 ## Install
 

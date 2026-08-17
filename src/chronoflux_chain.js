@@ -59,6 +59,36 @@ export function hashBlock(block) {
   return createHash('sha256').update(canonicalBlockPayload(block)).digest('hex');
 }
 
+/** Pre-book-id seals from the live Germany cutover. */
+export function legacyCanonicalPayload(block) {
+  const height = heightOf(block, 0);
+  const previousHash = String(block?.previousHash || GENESIS_PREV);
+  return JSON.stringify({
+    amount: block?.amount ?? block?.treasuryEmitted ?? null,
+    foundAt: block?.foundAt ?? null,
+    from: block?.from ?? null,
+    height,
+    jobId: block?.jobId ?? null,
+    miner: block?.miner ?? null,
+    previousHash,
+    scenarioLabel: block?.scenarioLabel ?? null,
+    timestamp: block?.timestamp ?? null,
+    to: block?.to ?? null,
+    transactions: block?.transactions ?? block?.txs ?? [],
+    triggerUsername: block?.triggerUsername ?? null,
+  });
+}
+
+export function hashBlockLegacy(block) {
+  return createHash('sha256').update(legacyCanonicalPayload(block)).digest('hex');
+}
+
+export function hashMatches(block) {
+  const got = String(block?.hash || '');
+  if (!got) return false;
+  return got === hashBlock(block) || got === hashBlockLegacy(block);
+}
+
 export function isSealedBlock(block) {
   return Boolean(
     block
@@ -88,8 +118,10 @@ export function rejectRewrite(held, candidate) {
   if (String(held.hash) !== String(candidate.hash || '')) {
     return { ok: false, reason: 'immutable' };
   }
-  if (hashBlock(candidate) !== String(held.hash)) {
-    return { ok: false, reason: 'immutable' };
+  if (!hashMatches({ ...candidate, hash: held.hash }) || hashBlock(candidate) !== String(held.hash)) {
+    if (hashBlock(candidate) !== String(held.hash) && hashBlockLegacy(candidate) !== String(held.hash)) {
+      return { ok: false, reason: 'immutable' };
+    }
   }
   return { ok: true };
 }
@@ -135,15 +167,14 @@ export function verifyChain(blocks) {
     if (!block || typeof block !== 'object') {
       return { ok: false, reason: 'bad_block', index: i };
     }
-    if (String(block.book || '') !== GNFP_BOOK.id) {
+    if (block.book && String(block.book) !== GNFP_BOOK.id) {
       return { ok: false, reason: 'foreign_book', index: i };
     }
     const previousHash = String(block.previousHash || '');
     if (previousHash !== prev) {
       return { ok: false, reason: 'broken_link', index: i };
     }
-    const expected = hashBlock(block);
-    if (String(block.hash || '') !== expected) {
+    if (!hashMatches(block)) {
       return { ok: false, reason: 'hash_mismatch', index: i };
     }
     const h = heightOf(block, i);

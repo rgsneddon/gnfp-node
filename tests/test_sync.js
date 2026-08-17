@@ -74,6 +74,28 @@ test('fixture pull: empty node adopts remote tip then follows an advance and res
   await book.close();
 });
 
+test('two replica nodes host the same book tip after sync', async () => {
+  const chain = sealed(4);
+  const book = createBookPullServer({ blocks: chain, emissionBook: true });
+  await new Promise((resolve) => book.listen(resolve));
+  const port = book.address().port;
+  const aDir = scratchDir();
+  const bDir = scratchDir();
+  const one = await syncOnce({
+    hubHost: '127.0.0.1', hubStratum: port, tls: false, dataDir: aDir,
+  });
+  const two = await syncOnce({
+    hubHost: '127.0.0.1', hubStratum: port, tls: false, dataDir: bDir,
+  });
+  await book.close();
+  assert.equal(one.ok, true, one.reason);
+  assert.equal(two.ok, true, two.reason);
+  assert.equal(tipIdentity(one.book).tipHash, tipIdentity({ blocks: chain }).tipHash);
+  assert.equal(tipIdentity(two.book).tipHash, tipIdentity(one.book).tipHash);
+  assert.equal(tipIdentity(one.book).book, tipIdentity(two.book).book);
+  assert.equal(one.book.blocks.length, two.book.blocks.length);
+});
+
 test('saveNodeStore then loadNodeStore does not reset to height 0', () => {
   const dir = scratchDir();
   const chain = sealed(4);
