@@ -36,9 +36,21 @@ test('parse args default to Germany book', () => {
   assert.equal(j.coin, 'GNFP');
   assert.equal(j.version, VERSION);
   assert.match(j.hub, /de\.restoreprivacy\.online:1474/);
+  assert.equal(j.tls, true);
+  assert.match(String(j.hubHttp), /de\.restoreprivacy\.online:1474/);
+  assert.equal(j.verifyBeforeAdopt, true);
+  assert.equal(j.emissionBook, false);
   const ann = parseNodeArgs([
     'node', 'node.js', '--announce-host', 'mynode.example', '--role', 'pool',
   ]);
   assert.equal(ann.announceHost, 'mynode.example');
   assert.equal(ann.role, 'pool');
+  const hijack = parseNodeArgs(['node', 'node.js', '--hub', 'evil.example:9999']);
+  assert.equal(hijack.hubHost, 'de.restoreprivacy.online');
+  assert.equal(hijack.hubStratum, 1474);
+  assert.equal(hijack.book, 'gnfp-germany-book-v1');
+  const pulled = parseNodeArgs(['node', 'node.js', '--pull', '127.0.0.1:18014']);
+  assert.equal(pulled.hub, 'de.restoreprivacy.online:1474');
+  assert.equal(pulled.pullHost, '127.0.0.1');
+  assert.equal(pulled.pullPort, 18014);
 });

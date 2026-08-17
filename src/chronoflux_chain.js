@@ -9,6 +9,23 @@
 import { createHash } from 'crypto';
 
 export const GENESIS_PREV = '0'.repeat(64);
+export const CONFIRMATION_MS = 72_000;
+
+/** Immutable emission book. Not an env, flag, or operator catalog entry. */
+export const GNFP_BOOK = Object.freeze({
+  coin: 'GNFP',
+  id: 'gnfp-germany-book-v1',
+  host: 'de.restoreprivacy.online',
+  port: 1474,
+  stratum: 'de.restoreprivacy.online:1474',
+});
+
+export function isCanonicalBook(value) {
+  const id = typeof value === 'string'
+    ? value
+    : (value && typeof value === 'object' ? (value.book || value.bookId || value.id) : '');
+  return String(id || '') === GNFP_BOOK.id;
+}
 
 export function heightOf(block, fallback = 0) {
   if (!block || typeof block !== 'object') return fallback;
@@ -21,6 +38,8 @@ export function canonicalBlockPayload(block) {
   const previousHash = String(block?.previousHash || GENESIS_PREV);
   const body = {
     amount: block?.amount ?? block?.treasuryEmitted ?? null,
+    book: GNFP_BOOK.id,
+    coin: GNFP_BOOK.coin,
     foundAt: block?.foundAt ?? null,
     from: block?.from ?? null,
     height,
@@ -50,10 +69,37 @@ export function isSealedBlock(block) {
   );
 }
 
+export function isBlockConfirmed(block, now = Date.now()) {
+  const found = Number(block?.foundAt ?? block?.timestamp ?? 0);
+  if (!Number.isFinite(found) || found <= 0) return false;
+  return Number(now) - found >= CONFIRMATION_MS;
+}
+
+/** A found, sealed block is held forever. Confirmation does not rewrite it. */
+export function isImmutableHold(block) {
+  return isSealedBlock(block) && String(block.book || '') === GNFP_BOOK.id;
+}
+
+export function rejectRewrite(held, candidate) {
+  if (!isImmutableHold(held)) return { ok: true };
+  if (!candidate || typeof candidate !== 'object') {
+    return { ok: false, reason: 'immutable' };
+  }
+  if (String(held.hash) !== String(candidate.hash || '')) {
+    return { ok: false, reason: 'immutable' };
+  }
+  if (hashBlock(candidate) !== String(held.hash)) {
+    return { ok: false, reason: 'immutable' };
+  }
+  return { ok: true };
+}
+
 export function sealBlock(block, previousHash = GENESIS_PREV, index = 0) {
   const height = heightOf(block, index);
   const sealed = {
     ...block,
+    book: GNFP_BOOK.id,
+    coin: GNFP_BOOK.coin,
     height,
     index: block?.index ?? height,
     previousHash: String(previousHash || GENESIS_PREV),
@@ -88,6 +134,9 @@ export function verifyChain(blocks) {
     const block = blocks[i];
     if (!block || typeof block !== 'object') {
       return { ok: false, reason: 'bad_block', index: i };
+    }
+    if (String(block.book || '') !== GNFP_BOOK.id) {
+      return { ok: false, reason: 'foreign_book', index: i };
     }
     const previousHash = String(block.previousHash || '');
     if (previousHash !== prev) {
@@ -153,14 +202,34 @@ export function extractChain(book) {
  * while keeping the local sealed blocks. A previousHash + height with no
  * blocks is not an extension.
  */
+function sealedRemoteOrReject(remoteChain) {
+  if (!remoteChain.length) return { ok: true, blocks: [] };
+  if (!remoteChain.every(isSealedBlock)) {
+    return { ok: false, reason: 'unsealed_remote' };
+  }
+  const check = verifyChain(remoteChain);
+  if (!check.ok) return { ok: false, reason: check.reason || 'invalid_chain' };
+  return { ok: true, blocks: remoteChain.map((b) => ({ ...b })) };
+}
+
 export function adoptReplicaBook(local, remote) {
   if (!remote || typeof remote !== 'object' || Array.isArray(remote)) {
     return { ok: false, reason: 'bad_book' };
   }
+  if (remote.book && !isCanonicalBook(remote)) {
+    return { ok: false, reason: 'foreign_book' };
+  }
+  if (remote.coin && String(remote.coin) !== GNFP_BOOK.coin) {
+    return { ok: false, reason: 'foreign_book' };
+  }
   const remoteChain = extractChain(remote);
   const localChain = extractChain(local);
-  const remoteSealed = remoteChain.length ? ensureSealedChain(remoteChain) : [];
-  const localSealed = localChain.length ? ensureSealedChain(localChain) : [];
+  const remoteGot = sealedRemoteOrReject(remoteChain);
+  if (!remoteGot.ok) return remoteGot;
+  const remoteSealed = remoteGot.blocks;
+  const localSealed = localChain.length && localChain.every(isSealedBlock)
+    ? localChain.map((b) => ({ ...b }))
+    : (localChain.length ? ensureSealedChain(localChain) : []);
 
   if (remoteSealed.length) {
     const check = verifyChain(remoteSealed);

@@ -1,7 +1,7 @@
 {
   "name": "gnfp-node",
-  "version": "1.0.1",
-  "description": "Join-node for the $GNFP Germany book (stratum + HTTP replica)",
+  "version": "1.0.2",
+  "description": "Third-party gnfp-node: seed-sync the Germany master book (verify-before-adopt)",
   "type": "module",
   "bin": {
     "gnfp-node": "src/node.js"

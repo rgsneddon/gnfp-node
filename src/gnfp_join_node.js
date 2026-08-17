@@ -6,22 +6,36 @@ import http from 'http';
 import net from 'net';
 import tls from 'tls';
 import { GNFP_TICKER, listGnfpNodes, buildMinerCommand } from './gnfp_nodes.js';
-import { adoptReplicaBook } from './chronoflux_chain.js';
+import { adoptReplicaBook, extractChain, GNFP_BOOK } from './chronoflux_chain.js';
+import { parsePullQuery, pullPayload, tipIdentity, wantsIncrementalPull } from './book_pull.js';
+import { loadNodeStore, saveNodeStore, defaultDataDir } from './node_store.js';
+import { startSyncLoop } from './node_sync.js';
 import { defaultUseTls } from './stratum_tls.js';
 
-export const DEFAULT_HUB_HOST = 'de.restoreprivacy.online';
-export const DEFAULT_HUB_STRATUM = 1474;
-export const DEFAULT_HUB_HTTP = 'https://de.restoreprivacy.online/api/network';
+export const DEFAULT_HUB_HOST = GNFP_BOOK.host;
+export const DEFAULT_HUB_STRATUM = GNFP_BOOK.port;
+export const DEFAULT_HUB_HTTP = `https://${GNFP_BOOK.host}:${GNFP_BOOK.port}/api/tip`;
 
 export function joinConfig(env = process.env, argv = process.argv) {
+  const pull = String(env.GNFP_PULL || '').trim();
+  let pullHost = GNFP_BOOK.host;
+  let pullPort = GNFP_BOOK.port;
+  if (pull) {
+    const [h, p] = pull.split(':');
+    pullHost = h || pullHost;
+    pullPort = Number(p || pullPort);
+  }
   return {
-    hubHost: env.GNFP_HUB_HOST || DEFAULT_HUB_HOST,
-    hubStratum: Number(env.GNFP_HUB_STRATUM || DEFAULT_HUB_STRATUM),
-    hubHttp: env.GNFP_HUB_HTTP || DEFAULT_HUB_HTTP,
+    hubHost: pullHost,
+    hubStratum: pullPort,
+    hubHttp: env.GNFP_HUB_HTTP || `https://${pullHost}:${pullPort}/api/tip`,
+    book: GNFP_BOOK.id,
     listenStratum: Number(env.GNFP_STRATUM_PORT || 1474),
     listenHttp: Number(env.GNFP_HTTP_PORT || 8014),
     replicaOnly: env.GNFP_REPLICA_ONLY === '1',
     tls: defaultUseTls(argv, env),
+    dataDir: env.GNFP_NODE_DATA || defaultDataDir(env),
+    pollMs: Number(env.GNFP_NODE_POLL_MS || 4000),
   };
 }
 
@@ -100,18 +114,56 @@ export function createJoinHttpServer({
               return;
             }
             setReplicaBook(adopted.book);
+            const persistDir = process.env.GNFP_NODE_DATA || '';
+            if (persistDir) {
+              try { saveNodeStore(persistDir, adopted.book); } catch { /* persist best-effort */ }
+            }
             ok(200, {
               ok: true,
               coin: GNFP_TICKER,
               synced: true,
               tip: adopted.book.tip ?? adopted.book.height,
+              tipHash: tipIdentity(adopted.book).tipHash,
               verifyBeforeAdopt: true,
+              emissionBook: false,
             });
           } catch (err) {
             ok(400, { ok: false, reason: 'bad_sync', error: String(err?.message || err) });
           }
         });
         return;
+      }
+      if (
+        url === '/api/headers' ||
+        url === '/gnfp/api/headers' ||
+        url === '/api/blocks' ||
+        url === '/gnfp/api/blocks'
+      ) {
+        const q = new URL(String(req.url || '/'), 'http://gnfp.local').searchParams;
+        const cached = getReplicaBook() || {};
+        const chain = extractChain(cached);
+        if (url.endsWith('/headers') || url.endsWith('/api/headers')) {
+          const got = pullPayload(chain, parsePullQuery(q), { emissionBook: false });
+          ok(200, {
+            ok: true,
+            coin: GNFP_TICKER,
+            height: got.height,
+            tip: got.tip,
+            tipHeight: got.tipHeight,
+            tipHash: got.tipHash,
+            previousHash: got.previousHash,
+            count: got.count,
+            more: got.more,
+            headers: got.headers,
+            verifyBeforeAdopt: true,
+            emissionBook: false,
+          });
+          return;
+        }
+        if (wantsIncrementalPull(q) || chain.length) {
+          ok(200, pullPayload(chain, parsePullQuery(q), { emissionBook: false }));
+          return;
+        }
       }
       if (url === '/api/nodes' || url === '/gnfp/api/nodes') {
         if (req.method === 'POST') {
@@ -198,8 +250,24 @@ export function createJoinHttpServer({
         url === '/gnfp/api/tip'
       ) {
         const cached = getReplicaBook();
+        if (url.endsWith('/tip') && cached) {
+          ok(200, {
+            ...tipIdentity(cached, { emissionBook: false }),
+            emissionBook: false,
+            replica: true,
+          });
+          return;
+        }
         const book = cached || (await fetchHubNetwork(hubHttp, fetchImpl));
-        ok(200, { ...book, coin: book.coin || GNFP_TICKER, joined: !cached, replica: Boolean(cached) });
+        const ident = cached ? tipIdentity(cached, { emissionBook: false }) : {};
+        ok(200, {
+          ...book,
+          ...ident,
+          coin: book.coin || GNFP_TICKER,
+          joined: !cached,
+          replica: Boolean(cached),
+          emissionBook: false,
+        });
         return;
       }
       ok(404, { ok: false, reason: 'not_found', coin: GNFP_TICKER });
@@ -217,6 +285,10 @@ export function createJoinHttpServer({
 
 export function startJoinNode(opts = {}) {
   const cfg = { ...joinConfig(), ...opts };
+  if (cfg.dataDir) {
+    const loaded = loadNodeStore(cfg.dataDir);
+    if (loaded.book) setReplicaBook(loaded.book);
+  }
   const httpSrv = createJoinHttpServer({
     port: cfg.listenHttp,
     hubHttp: cfg.hubHttp,
@@ -234,7 +306,21 @@ export function startJoinNode(opts = {}) {
   } else {
     console.log('gnfp replica-only HTTP (no stratum)');
   }
-  return { http: httpSrv, stratum, cfg };
+  const sync = startSyncLoop({
+    hubHost: cfg.hubHost,
+    hubStratum: cfg.hubStratum,
+    tls: cfg.tls,
+    dataDir: cfg.dataDir,
+    fetchImpl: opts.fetchImpl,
+    pollMs: cfg.pollMs,
+    onAdopt: (got) => {
+      if (got.book) setReplicaBook(got.book);
+    },
+    onError: (err) => {
+      console.error('gnfp-node sync', err?.message || err);
+    },
+  });
+  return { http: httpSrv, stratum, cfg, sync };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
