@@ -1,6 +1,6 @@
 {
   "name": "gnfp-node",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Third-party gnfp-node: seed-sync the Germany master book (verify-before-adopt)",
   "type": "module",
   "bin": {

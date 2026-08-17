@@ -7,7 +7,7 @@ import { GNFP_BOOK } from './chronoflux_chain.js';
 import { hubBaseUrl } from './hub_http.js';
 import { defaultDataDir } from './node_store.js';
 
-export const VERSION = '1.0.2';
+export const VERSION = '1.0.3';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = `gnfp-node ${VERSION} — join the $GNFP Germany book
