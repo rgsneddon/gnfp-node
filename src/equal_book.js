@@ -12,10 +12,26 @@ import { hashMeetsJob } from './cpu_pow.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
+import { loadOrCreateSoloHost, startSoloAnnounceLoop } from './solo_announce.js';
 
 export function startEqualNode(cfg = {}) {
   const printer = cfg.printer || createCliPrinter();
   const book = createEqualBook({ dataDir: cfg.dataDir, printer });
+  const soloHost = cfg.announceHost || loadOrCreateSoloHost(cfg.dataDir);
+  const solo = startSoloAnnounceLoop(
+    () => ({
+      host: soloHost,
+      port: cfg.listenStratum || 1474,
+      threads: book.minerCount(),
+      accepted: book.acceptedCount(),
+      hashrate: book.acceptedCount(),
+    }),
+    {
+      announceUrl: cfg.announceUrl,
+      fetchImpl: cfg.fetchImpl,
+    },
+  );
+  book.onShare(() => { solo.tick(); });
   const httpSrv = book.listenHttp(cfg.listenHttp || 0);
   httpSrv.listen(() => {
     console.log(`gnfp equal-book http 0.0.0.0:${cfg.listenHttp || httpSrv.address()?.port} chain=${GNFP_BOOK.id}`);
@@ -53,7 +69,7 @@ export function startEqualNode(cfg = {}) {
       },
     });
   }
-  return { book, http: httpSrv, stratum, sync };
+  return { book, http: httpSrv, stratum, sync, solo };
 }
 
 export function loadEqualTls(cfg = {}) {
@@ -69,6 +85,8 @@ export function loadEqualTls(cfg = {}) {
 
 export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {}) {
   const emit = printer || null;
+  const shareHooks = [];
+  let acceptedCount = 0;
   const loaded = dataDir ? loadNodeStore(dataDir).book : null;
   let blocks = extractChain(loaded);
   let height = blocks.length ? heightOf(blocks[blocks.length - 1]) : Number(loaded?.height || 0);
@@ -144,6 +162,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     height = nextHeight;
     nextJob();
     persist();
+    acceptedCount += 1;
+    for (const hook of shareHooks) {
+      try { hook(sealed); } catch { /* announce is best-effort */ }
+    }
     if (emit) {
       emit.blockFound(sealed);
       emit.tipHeight({ height, hash: sealed.hash });
@@ -327,5 +349,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     persist,
     blocks: () => blocks.slice(),
     height: () => height,
+    minerCount: () => miners.size,
+    acceptedCount: () => acceptedCount,
+    onShare: (fn) => {
+      if (typeof fn === 'function') shareHooks.push(fn);
+    },
   };
 }

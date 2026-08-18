@@ -1,6 +1,6 @@
 {
   "name": "gnfp-node",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Equal Chronoflux gnfp-node: live CLI, help topics, compact book",
   "type": "module",
   "bin": {

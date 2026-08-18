@@ -2,7 +2,7 @@
 
 Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore are **equal peers**, not masters. If a peer drops, this node keeps the tip, accepts miners, and continues the book.
 
-**Pin:** `1.0.8`  
+**Pin:** `1.0.9`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
@@ -11,7 +11,7 @@ Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore 
 |---|---|
 | Wallet **0.1.2** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.2 |
 | Miner **GNFPHash 1.0.1** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.1 |
-| Node **1.0.8** | https://github.com/rgsneddon/gnfp-node |
+| Node **1.0.9** | https://github.com/rgsneddon/gnfp-node |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
 

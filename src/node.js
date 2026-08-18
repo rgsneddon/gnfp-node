@@ -16,7 +16,7 @@ import {
   SEED_NODES,
 } from './cli_status.js';
 
-export const VERSION = '1.0.8';
+export const VERSION = '1.0.9';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = renderHelp('', VERSION);

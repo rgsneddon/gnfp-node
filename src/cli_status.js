@@ -185,6 +185,11 @@ Public seed (TLS):
 Use a real gnfp1 address. Local stratum is plaintext unless you pass
 --tls-cert / --tls-key (or GNFP_TLS_CERT / GNFP_TLS_KEY).
 
+A miner hashing here is a solo miner. This node reports it to the
+explorer and live book (POST /api/nodes role=solo) so the pool page
+Solo table can list it. The explorer is a view of that book — it does
+not need its own chain.
+
 When a share seals a block here the CLI prints:
 
   block found {height, hash, previousHash, miner, amount, …}
