@@ -52,6 +52,14 @@ export function canonicalBlockPayload(block) {
     transactions: block?.transactions ?? block?.txs ?? [],
     triggerUsername: block?.triggerUsername ?? null,
   };
+  // Only present on seals that recorded book law. Omit on older blocks so
+  // their stored hash still matches.
+  if (block?.difficulty != null && block.difficulty !== '') {
+    body.difficulty = Number(block.difficulty);
+  }
+  if (block?.blockRewardGnfp != null && block.blockRewardGnfp !== '') {
+    body.blockRewardGnfp = Number(block.blockRewardGnfp);
+  }
   return JSON.stringify(body);
 }
 

@@ -70,21 +70,9 @@ export function buildMinerCommand({ address, nodeId, threads = 4 } = {}) {
   };
 }
 
-/**
- * Network difficulty from advertised work bits (2^bits expected hashes)
- * and optional retarget from observed hashrate × target interval.
- * Never copies height/tip.
- */
-export function networkDifficulty({ bits = 1, hashrate = 0, intervalMs = 0 } = {}) {
-  const b = Math.max(1, Math.min(32, Math.floor(Number(bits) || 1)));
-  const work = 2 ** b;
-  const h = Math.max(0, Number(hashrate) || 0);
-  const intervalSec = Math.max(0, (Number(intervalMs) || 0) / 1000);
-  const retarget = h > 0 && intervalSec > 0 ? Math.round(h * intervalSec) : 0;
-  const difficulty = Math.max(work, retarget);
-  return {
-    difficulty,
-    difficultyBits: b,
-    work,
-  };
-}
+export {
+  networkDifficulty,
+  blockBitsFromHashrate,
+  targetBlockIntervalMs,
+  bookLawOnTip,
+} from './book_law.js';

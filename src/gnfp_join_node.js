@@ -10,7 +10,7 @@ import { adoptReplicaBook, extractChain, GNFP_BOOK } from './chronoflux_chain.js
 import { parsePullQuery, pullPayload, tipIdentity, wantsIncrementalPull } from './book_pull.js';
 import { loadNodeStore, saveNodeStore, defaultDataDir } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
-import { defaultUseTls } from './stratum_tls.js';
+import { defaultUseTls, loadTlsOptions } from './stratum_tls.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
 import { loadOrCreateSoloHost, startSoloAnnounceLoop } from './solo_announce.js';
 
@@ -74,12 +74,15 @@ export function relayStratumSocket(minerSock, { hubHost, hubStratum, tls: useTls
 export function createJoinStratumServer(opts = {}) {
   const cfg = { ...joinConfig(), ...opts };
   let miners = 0;
-  const server = net.createServer((sock) => {
+  const onSock = (sock) => {
     miners += 1;
     sock.on('close', () => { miners = Math.max(0, miners - 1); });
     sock.on('error', () => { miners = Math.max(0, miners - 1); });
     relayStratumSocket(sock, cfg);
-  });
+  };
+  const tlsOpts = cfg.tlsOptions
+    || (cfg.tls === false ? null : loadTlsOptions(cfg.env || process.env));
+  const server = tlsOpts ? tls.createServer(tlsOpts, onSock) : net.createServer(onSock);
   server.on('error', (err) => {
     console.error(`gnfp-node join stratum bind failed :${cfg.listenStratum} — ${err.code || err.message} (CLI keeps running)`);
   });
@@ -88,6 +91,7 @@ export function createJoinStratumServer(opts = {}) {
     close: () => new Promise((resolve) => server.close(resolve)),
     address: () => server.address(),
     minerCount: () => miners,
+    tls: Boolean(tlsOpts),
     server,
   };
 }
@@ -317,7 +321,8 @@ export function startJoinNode(opts = {}) {
   if (!cfg.replicaOnly) {
     stratum = createJoinStratumServer(cfg);
     stratum.listen(() => {
-      console.log(`gnfp join stratum 0.0.0.0:${cfg.listenStratum} -> ${cfg.hubHost}:${cfg.hubStratum}`);
+      const mode = stratum.tls ? 'tls' : 'tcp';
+      console.log(`gnfp join stratum ${mode} 0.0.0.0:${cfg.listenStratum} -> ${cfg.hubHost}:${cfg.hubStratum}`);
     });
   } else {
     console.log('gnfp replica-only HTTP (no stratum)');

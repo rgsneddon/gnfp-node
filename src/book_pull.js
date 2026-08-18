@@ -9,6 +9,7 @@ import {
   heightOf,
   tipHashOf,
 } from './chronoflux_chain.js';
+import { bookLawOnTip } from './book_law.js';
 
 export const GNFP_COIN = 'GNFP';
 export const DEFAULT_PULL_LIMIT = 256;
@@ -68,6 +69,7 @@ export function tipIdentity(book, extra = {}) {
   const h = last
     ? heightOf(last, 0)
     : Math.max(0, Math.floor(Number(book?.height ?? book?.tip ?? book?.tipHeight) || 0));
+  const bits = extra.difficultyBits ?? last?.difficulty ?? book?.difficultyBits;
   return {
     ok: true,
     coin: extra.coin || book?.coin || GNFP_COIN,
@@ -79,6 +81,10 @@ export function tipIdentity(book, extra = {}) {
     previousHash: last ? String(last.previousHash || '') : String(book?.previousHash || ''),
     verifyBeforeAdopt: true,
     emissionBook: extra.emissionBook === true,
+    ...bookLawOnTip({
+      bits,
+      hashrate: extra.hashrate ?? book?.hashrate,
+    }),
   };
 }
 

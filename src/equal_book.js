@@ -9,6 +9,12 @@ import tls from 'tls';
 import { GNFP_BOOK, extractChain, heightOf, sealBlock, tipHashOf } from './chronoflux_chain.js';
 import { applyIncremental, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
 import { hashMeetsJob } from './cpu_pow.js';
+import {
+  BLOCK_REWARD_GNFP,
+  blockBitsFromHashrate,
+  bookLawOnTip,
+  canFormBlock,
+} from './book_law.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
@@ -83,10 +89,12 @@ export function loadEqualTls(cfg = {}) {
   };
 }
 
-export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {}) {
+export function createEqualBook({ dataDir = '', bits = 0, printer = null } = {}) {
   const emit = printer || null;
   const shareHooks = [];
   let acceptedCount = 0;
+  let hashWindowStart = Date.now();
+  let hashWindowCount = 0;
   const loaded = dataDir ? loadNodeStore(dataDir).book : null;
   let blocks = extractChain(loaded);
   let height = blocks.length ? heightOf(blocks[blocks.length - 1]) : Number(loaded?.height || 0);
@@ -94,13 +102,36 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   let job = null;
   const miners = new Set();
 
+  function liveHashrate() {
+    const dt = Math.max(1, (Date.now() - hashWindowStart) / 1000);
+    return hashWindowCount / dt;
+  }
+
+  function noteHash() {
+    hashWindowCount += 1;
+    if (Date.now() - hashWindowStart > 60_000) {
+      hashWindowStart = Date.now();
+      hashWindowCount = 1;
+    }
+  }
+
+  function currentBits() {
+    const forced = Number(bits);
+    if (Number.isFinite(forced) && forced > 0) return Math.floor(forced);
+    const last = blocks.length ? blocks[blocks.length - 1] : null;
+    return blockBitsFromHashrate(liveHashrate()) || Number(last?.difficulty) || 0;
+  }
+
   function tip() {
     return {
       ...tipIdentity({ blocks, height, coin: GNFP_BOOK.coin, book: GNFP_BOOK.id }, {
         emissionBook: true,
+        hashrate: liveHashrate(),
+        difficultyBits: currentBits(),
       }),
       emissionBook: true,
       equalNode: true,
+      ...bookLawOnTip({ bits: currentBits(), hashrate: liveHashrate() }),
     };
   }
 
@@ -120,11 +151,12 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
 
   function nextJob() {
     const h = height || 0;
+    const jobBits = currentBits();
     job = {
       jobId: `gnfp-${h}-${jobSeq++}`,
       id: `gnfp-${h}-${jobSeq}`,
       height: h,
-      difficulty: bits,
+      difficulty: jobBits,
       input: `gnfp-equal-${h}-${jobSeq}`,
       preWork: `gnfp-equal-${h}-${jobSeq}`,
       algorithm: 'GNFPHash',
@@ -143,6 +175,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     if (!hashMeetsJob(current, nonce, '')) {
       return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
     }
+    noteHash();
+    const jobBits = Math.max(1, Math.floor(Number(current.difficulty) || currentBits()));
+    if (!canFormBlock({ blockHashMet: hashMeetsJob(current, nonce, '') })) {
+      return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
+    }
     const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const nextHeight = height + 1;
     const sealed = sealBlock(
@@ -150,7 +187,9 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         height: nextHeight,
         jobId: current.jobId,
         miner: String(username || 'anon'),
-        amount: 1,
+        amount: BLOCK_REWARD_GNFP,
+        blockRewardGnfp: BLOCK_REWARD_GNFP,
+        difficulty: jobBits,
         foundAt: Date.now(),
         from: 'coinbase',
         to: 'miners',
@@ -223,7 +262,6 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         json: {
           ...tip(),
           ticker: GNFP_BOOK.coin,
-          blockRewardGnfp: 1,
           miners: miners.size,
         },
       };
