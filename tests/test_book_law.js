@@ -18,19 +18,22 @@ test('book law: time never mints; reward and dust are fixed', () => {
   assert.equal(canFormBlock({ blockHashMet: true }), true);
   assert.equal(BLOCK_REWARD_GNFP, 1);
   assert.equal(SHARE_CREDIT_MICRO, 1);
-  assert.equal(TARGET_BLOCK_INTERVAL_MS, 60_000);
+  assert.equal(TARGET_BLOCK_INTERVAL_MS, 90_000);
 });
 
-test('book law: difficulty retargets with hashrate and is not stuck at 60000', () => {
+test('book law: difficulty retargets toward 90s and is not stuck at 60000', () => {
   const idle = networkDifficulty({ hashrate: 0 });
   assert.equal(idle.difficultyBits, GENESIS_DIFFICULTY_BITS);
+  assert.equal(GENESIS_DIFFICULTY_BITS, 15);
   assert.equal(idle.difficulty, 2 ** GENESIS_DIFFICULTY_BITS);
 
   const mid = networkDifficulty({ hashrate: 280 });
-  assert.equal(mid.intervalMs, 60_000);
+  assert.equal(mid.intervalMs, 90_000);
   assert.ok(mid.difficulty !== 60_000, `got ${mid.difficulty}`);
   assert.equal(mid.difficulty, 2 ** mid.difficultyBits);
-  assert.ok(mid.difficultyBits >= 8, `bits ${mid.difficultyBits}`);
+  assert.ok(mid.difficultyBits >= 14, `bits ${mid.difficultyBits}`);
+  const expectedSec = mid.difficulty / 280;
+  assert.ok(expectedSec > 45 && expectedSec < 180, `sec ${expectedSec}`);
 
   const fast = networkDifficulty({ hashrate: 10_000 });
   assert.ok(fast.difficulty > mid.difficulty, `fast=${fast.difficulty} mid=${mid.difficulty}`);

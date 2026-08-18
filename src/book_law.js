@@ -8,11 +8,13 @@ export const BLOCK_REWARD_MICRO = UNITS_PER_GNFP;
 /** Per accepted hash, when the book credits dust. 1e-8 GNFP. */
 export const SHARE_CREDIT_MICRO = 1;
 /** Target spacing for retarget. Not a mint clock. */
-export const TARGET_BLOCK_INTERVAL_MS = 60_000;
+export const TARGET_BLOCK_INTERVAL_MS = 90_000;
 export const MIN_DIFFICULTY_BITS = 1;
 export const MAX_DIFFICULTY_BITS = 32;
-/** When hashrate is unknown, keep a modest target so genesis is not free. */
-export const GENESIS_DIFFICULTY_BITS = 1;
+/** Live floor: 2^14 hashes ≈ 90s at ~182 H/s. Never collapse to 1/8-bit on restart. */
+export const LIVE_MIN_DIFFICULTY_BITS = 14;
+/** Unknown hashrate (restart) aims ~90s at a few hundred H/s. */
+export const GENESIS_DIFFICULTY_BITS = 15;
 
 export function clampDifficultyBits(bits) {
   const n = Math.floor(Number(bits) || 0);
@@ -27,11 +29,26 @@ export function expectedHashesPerBlock(hashrate, intervalMs = TARGET_BLOCK_INTER
   return Math.max(2, h * (ms / 1000));
 }
 
-/** Bits a hash must meet to unlock a block. Scales with observed hashrate. */
+/** Bits closest to hashrate × 90s. Live network never below 14 bits. */
 export function blockBitsFromHashrate(hashrate, intervalMs = TARGET_BLOCK_INTERVAL_MS) {
   const h = Math.max(0, Number(hashrate) || 0);
   if (h <= 0) return GENESIS_DIFFICULTY_BITS;
-  return clampDifficultyBits(Math.ceil(Math.log2(expectedHashesPerBlock(h, intervalMs))));
+  const target = expectedHashesPerBlock(h, intervalMs);
+  const raw = Math.log2(Math.max(2, target));
+  const lo = Math.floor(raw);
+  const hi = Math.ceil(raw);
+  const nearest = Math.abs((2 ** hi) - target) < Math.abs((2 ** lo) - target) ? hi : lo;
+  return Math.max(LIVE_MIN_DIFFICULTY_BITS, clampDifficultyBits(nearest));
+}
+
+/** At most one bit per step. Never below the live 90s floor. */
+export function retargetBits(hashrate, previousBits, intervalMs = TARGET_BLOCK_INTERVAL_MS) {
+  const next = blockBitsFromHashrate(hashrate, intervalMs);
+  const prev = Math.floor(Number(previousBits) || 0);
+  if (!Number.isFinite(prev) || prev < LIVE_MIN_DIFFICULTY_BITS) return next;
+  if (next > prev) return Math.min(MAX_DIFFICULTY_BITS, prev + 1);
+  if (next < prev) return Math.max(LIVE_MIN_DIFFICULTY_BITS, prev - 1);
+  return next;
 }
 
 /**

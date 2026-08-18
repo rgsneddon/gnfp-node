@@ -89,7 +89,7 @@ export function loadEqualTls(cfg = {}) {
   };
 }
 
-export function createEqualBook({ dataDir = '', bits = 0, printer = null } = {}) {
+export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {}) {
   const emit = printer || null;
   const shareHooks = [];
   let acceptedCount = 0;
@@ -119,7 +119,7 @@ export function createEqualBook({ dataDir = '', bits = 0, printer = null } = {})
     const forced = Number(bits);
     if (Number.isFinite(forced) && forced > 0) return Math.floor(forced);
     const last = blocks.length ? blocks[blocks.length - 1] : null;
-    return blockBitsFromHashrate(liveHashrate()) || Number(last?.difficulty) || 0;
+    return blockBitsFromHashrate(liveHashrate()) || Number(last?.difficulty) || 8;
   }
 
   function tip() {
