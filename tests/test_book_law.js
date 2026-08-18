@@ -2,14 +2,23 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   BLOCK_REWARD_GNFP,
+  BLOCK_REWARD_NANOS,
   GENESIS_DIFFICULTY_BITS,
-  SHARE_CREDIT_MICRO,
+  HASH_BONUS_GNFP,
+  HASH_BONUS_NANOS,
+  NANOS_PER_GNFP,
   TARGET_BLOCK_INTERVAL_MS,
   blockBitsFromHashrate,
   bookLawOnTip,
   canFormBlock,
+  emptyHashWindow,
+  hashBonusGnfp,
+  hashBonusNanos,
+  hashesThisRoundOf,
   networkDifficulty,
+  noteMinerHashes,
   retargetBits,
+  settleWindowCredits,
 } from '../src/book_law.js';
 import { tipIdentity } from '../src/book_pull.js';
 import { hashBlock, sealBlock } from '../src/chronoflux_chain.js';
@@ -18,8 +27,37 @@ test('book law: time never mints; reward and dust are fixed', () => {
   assert.equal(canFormBlock({ blockHashMet: false }), false);
   assert.equal(canFormBlock({ blockHashMet: true }), true);
   assert.equal(BLOCK_REWARD_GNFP, 1);
-  assert.equal(SHARE_CREDIT_MICRO, 1);
+  assert.equal(HASH_BONUS_GNFP, 0.000000001);
+  assert.equal(HASH_BONUS_NANOS, 1);
+  assert.equal(NANOS_PER_GNFP, 1_000_000_000);
   assert.equal(TARGET_BLOCK_INTERVAL_MS, 90_000);
+});
+
+test('book law: per-hash bonus is 1e-9 GNFP and resets when a block forms', () => {
+  assert.equal(canFormBlock({ blockHashMet: false }), false);
+  let window = emptyHashWindow();
+  window = noteMinerHashes(window, 'alice', 10);
+  window = noteMinerHashes(window, 'bob', 4);
+  window = noteMinerHashes(window, 'alice', 2);
+  window = noteMinerHashes(window, 'eve', 0);
+  window = noteMinerHashes(window, 'bad', -3);
+  assert.equal(hashesThisRoundOf(window, 'alice'), 12);
+  assert.equal(hashesThisRoundOf(window, 'bob'), 4);
+  assert.equal(hashesThisRoundOf(window, 'eve'), 0);
+  assert.equal(hashBonusNanos(12), 12);
+  assert.equal(hashBonusGnfp(12), 12 / NANOS_PER_GNFP);
+  const settled = settleWindowCredits(window);
+  assert.equal(settled.potNanos, BLOCK_REWARD_NANOS);
+  assert.equal(settled.bonusNanos.alice, 12);
+  assert.equal(settled.bonusNanos.bob, 4);
+  assert.equal(settled.totalsNanos.alice, settled.potSplits.alice + 12);
+  assert.equal(settled.totalsNanos.bob, settled.potSplits.bob + 4);
+  assert.equal(hashesThisRoundOf(settled.nextWindow, 'alice'), 0);
+  assert.equal(hashesThisRoundOf(settled.nextWindow, 'bob'), 0);
+  const next = noteMinerHashes(settled.nextWindow, 'alice', 5);
+  assert.equal(hashesThisRoundOf(next, 'alice'), 5);
+  assert.equal(hashBonusNanos(5), 5);
+  assert.equal(hashBonusGnfp(5), 5 / NANOS_PER_GNFP);
 });
 
 test('book law: difficulty retargets toward 90s and is not stuck at 60000', () => {

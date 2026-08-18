@@ -2,11 +2,17 @@
  * Immutable book law. Every gnfp-node uses these rules.
  * Pool / explorer only report them — they do not invent a second difficulty.
  */
+/** Legacy 1e-8 subunit (1 GNFP pot). Too coarse for the 1e-9 hash bonus. */
 export const UNITS_PER_GNFP = 100_000_000;
+export const NANOS_PER_GNFP = 1_000_000_000;
 export const BLOCK_REWARD_GNFP = 1;
 export const BLOCK_REWARD_MICRO = UNITS_PER_GNFP;
-/** Per accepted hash, when the book credits dust. 1e-8 GNFP. */
-export const SHARE_CREDIT_MICRO = 1;
+export const BLOCK_REWARD_NANOS = NANOS_PER_GNFP;
+/** 0.000000001 GNFP per in-window hash. Resets every formed block. */
+export const HASH_BONUS_NANOS = 1;
+export const HASH_BONUS_GNFP = HASH_BONUS_NANOS / NANOS_PER_GNFP;
+/** @deprecated old 1e-8 per accepted share — do not use for new credits */
+export const SHARE_CREDIT_MICRO = 0;
 /** Target spacing for retarget. Not a mint clock. */
 export const TARGET_BLOCK_INTERVAL_MS = 90_000;
 export const MIN_DIFFICULTY_BITS = 1;
@@ -106,7 +112,81 @@ export function coinbaseAmountGnfp() {
   return BLOCK_REWARD_GNFP;
 }
 
-/** Fields every tip / stats payload should carry. */
+export function emptyHashWindow() {
+  return Object.create(null);
+}
+
+export function hashesThisRoundOf(window, miner) {
+  return Math.max(0, Math.floor(Number(window?.[miner]) || 0));
+}
+
+/** Only valid submitted hashes. Rejects / invalid work pass n <= 0. */
+export function noteMinerHashes(window, miner, n) {
+  const add = Math.max(0, Math.floor(Number(n) || 0));
+  const key = String(miner || '').trim();
+  const next = { ...(window && typeof window === 'object' ? window : {}) };
+  if (!key || add <= 0) return next;
+  next[key] = hashesThisRoundOf(next, key) + add;
+  return next;
+}
+
+export function hashBonusNanos(hashes) {
+  return Math.max(0, Math.floor(Number(hashes) || 0)) * HASH_BONUS_NANOS;
+}
+
+export function hashBonusGnfp(hashes) {
+  return hashBonusNanos(hashes) / NANOS_PER_GNFP;
+}
+
+function splitPotByHashes(hashCounts, potNanos) {
+  const pot = Math.max(0, Math.floor(Number(potNanos) || 0));
+  const entries = Object.entries(hashCounts || {}).map(([k, v]) => [
+    k,
+    Math.max(0, Math.floor(Number(v) || 0)),
+  ]);
+  const total = entries.reduce((s, [, n]) => s + n, 0);
+  const out = {};
+  if (pot <= 0 || total <= 0) {
+    for (const [k] of entries) out[k] = 0;
+    return out;
+  }
+  let allocated = 0;
+  const parts = entries.map(([k, n]) => {
+    const share = Math.floor((pot * n) / total);
+    allocated += share;
+    return { k, share, n };
+  });
+  parts.sort((a, b) => b.n - a.n || String(a.k).localeCompare(String(b.k)));
+  const rem = pot - allocated;
+  if (rem > 0 && parts.length) parts[0].share += rem;
+  for (const p of parts) out[p.k] = p.share;
+  return out;
+}
+
+/**
+ * 1 GNFP pot split by in-window hashes, plus 1e-9 GNFP per hash.
+ * Returns a fresh empty window — bonus resets on every formed block.
+ */
+export function settleWindowCredits(hashCounts, { potNanos = BLOCK_REWARD_NANOS } = {}) {
+  const counts = hashCounts && typeof hashCounts === 'object' ? hashCounts : {};
+  const potSplits = splitPotByHashes(counts, potNanos);
+  const bonusNanos = {};
+  const totalsNanos = {};
+  for (const [k, n] of Object.entries(counts)) {
+    const h = Math.max(0, Math.floor(Number(n) || 0));
+    bonusNanos[k] = hashBonusNanos(h);
+    totalsNanos[k] = (potSplits[k] || 0) + bonusNanos[k];
+  }
+  return {
+    potNanos: Math.max(0, Math.floor(Number(potNanos) || 0)),
+    potSplits,
+    bonusNanos,
+    totalsNanos,
+    nextWindow: emptyHashWindow(),
+  };
+}
+
+/** Fields every tip / stats / --print-config payload should carry. */
 export function bookLawOnTip({
   bits,
   hashrate = 0,
@@ -119,6 +199,9 @@ export function bookLawOnTip({
     expectedHashes: nd.expectedHashes,
     blockIntervalMs: nd.intervalMs,
     blockRewardGnfp: BLOCK_REWARD_GNFP,
+    hashBonusGnfp: HASH_BONUS_GNFP,
+    hashBonusNanos: HASH_BONUS_NANOS,
+    nanosPerGnfp: NANOS_PER_GNFP,
     shareCreditMicro: SHARE_CREDIT_MICRO,
     unitsPerGnfp: UNITS_PER_GNFP,
   };

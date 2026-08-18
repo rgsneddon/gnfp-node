@@ -60,6 +60,9 @@ export function canonicalBlockPayload(block) {
   if (block?.blockRewardGnfp != null && block.blockRewardGnfp !== '') {
     body.blockRewardGnfp = Number(block.blockRewardGnfp);
   }
+  if (block?.hashBonusGnfp != null && block.hashBonusGnfp !== '') {
+    body.hashBonusGnfp = Number(block.hashBonusGnfp);
+  }
   return JSON.stringify(body);
 }
 

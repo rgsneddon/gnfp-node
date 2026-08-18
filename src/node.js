@@ -8,6 +8,7 @@ import path from 'path';
 import { startJoinNode, joinConfig } from './gnfp_join_node.js';
 import { startEqualNode } from './equal_book.js';
 import { GNFP_BOOK } from './chronoflux_chain.js';
+import { bookLawOnTip } from './book_law.js';
 import { hubBaseUrl } from './hub_http.js';
 import { defaultDataDir } from './node_store.js';
 import {
@@ -17,7 +18,7 @@ import {
   SEED_NODES,
 } from './cli_status.js';
 
-export const VERSION = '1.1.4';
+export const VERSION = '1.1.5';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = renderHelp('', VERSION);
@@ -87,6 +88,7 @@ export function main(argv = process.argv) {
       join: cfg.join,
       equalNode: cfg.equalNode,
       emissionBook: cfg.emissionBook,
+      ...bookLawOnTip(),
     })}\n`);
     return 0;
   }
