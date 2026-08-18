@@ -14,7 +14,7 @@ export const MAX_DIFFICULTY_BITS = 32;
 /** Live floor: 2^14 hashes ≈ 90s at ~182 H/s. Never collapse to 1/8-bit on restart. */
 export const LIVE_MIN_DIFFICULTY_BITS = 14;
 /** Unknown hashrate (restart) aims ~90s at a few hundred H/s. */
-export const GENESIS_DIFFICULTY_BITS = 15;
+export const GENESIS_DIFFICULTY_BITS = 21;
 
 export function clampDifficultyBits(bits) {
   const n = Math.floor(Number(bits) || 0);
@@ -56,7 +56,8 @@ export function retargetBits(
   const prevRaw = Math.floor(Number(previousBits) || 0);
   const prev = prevRaw >= LIVE_MIN_DIFFICULTY_BITS ? prevRaw : GENESIS_DIFFICULTY_BITS;
   const seen = Number(observed.lastBlockIntervalMs ?? observed.intervalMs ?? 0);
-  if (Number.isFinite(seen) && seen > 0) {
+  // Same-tick shares are not a block interval — do not treat 1ms as 90s/0.001.
+  if (Number.isFinite(seen) && seen >= 250) {
     const ratio = target / seen;
     const delta = Math.round(Math.log2(Math.max(1 / 256, Math.min(256, ratio))));
     return Math.max(

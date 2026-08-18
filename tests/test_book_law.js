@@ -25,7 +25,7 @@ test('book law: time never mints; reward and dust are fixed', () => {
 test('book law: difficulty retargets toward 90s and is not stuck at 60000', () => {
   const idle = networkDifficulty({ hashrate: 0 });
   assert.equal(idle.difficultyBits, GENESIS_DIFFICULTY_BITS);
-  assert.equal(GENESIS_DIFFICULTY_BITS, 15);
+  assert.equal(GENESIS_DIFFICULTY_BITS, 21);
   assert.equal(idle.difficulty, 2 ** GENESIS_DIFFICULTY_BITS);
 
   const mid = networkDifficulty({ hashrate: 280 });
