@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import fs from 'fs';
+import net from 'net';
 import { fileURLToPath } from 'node:url';
 import path from 'path';
 import { parseNodeArgs, VERSION } from '../src/node.js';
@@ -54,4 +56,45 @@ test('parse args default to Germany book', () => {
   assert.equal(pulled.hub, 'de.restoreprivacy.online:1474');
   assert.equal(pulled.pullHost, '127.0.0.1');
   assert.equal(pulled.pullPort, 18014);
+});
+
+test('shipped node stays running when both ports are already bound', async () => {
+  const httpBlock = net.createServer();
+  const stratBlock = net.createServer();
+  await new Promise((r) => httpBlock.listen(0, '0.0.0.0', r));
+  await new Promise((r) => stratBlock.listen(0, '0.0.0.0', r));
+  const httpPort = httpBlock.address().port;
+  const stratPort = stratBlock.address().port;
+  const dataDir = path.join(
+    process.env.GROK_GOAL_SCRATCH
+      || 'C:\\Users\\rgsne\\AppData\\Local\\Temp\\grok-goal-c3cedce0a4f4\\implementer',
+    `stay-${Date.now()}`,
+  );
+  fs.mkdirSync(dataDir, { recursive: true });
+  const child = spawn(
+    process.execPath,
+    [
+      'src/node.js',
+      '--notls',
+      '--pull', '127.0.0.1:1',
+      '--http-port', String(httpPort),
+      '--stratum-port', String(stratPort),
+      '--data-dir', dataDir,
+      '--poll-ms', '1000',
+    ],
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stderr.on('data', (d) => { out += d; });
+  try {
+    await new Promise((r) => setTimeout(r, 1800));
+    assert.equal(child.exitCode, null, `node exited early:\n${out}`);
+    assert.equal(child.killed, false);
+    assert.match(out, /watching seeds/);
+  } finally {
+    child.kill();
+    await new Promise((r) => httpBlock.close(r));
+    await new Promise((r) => stratBlock.close(r));
+  }
 });

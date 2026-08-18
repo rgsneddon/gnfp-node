@@ -11,9 +11,11 @@ import { applyIncremental, parsePullQuery, pullPayload, tipIdentity } from './bo
 import { hashMeetsJob } from './cpu_pow.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
+import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
 
 export function startEqualNode(cfg = {}) {
-  const book = createEqualBook({ dataDir: cfg.dataDir });
+  const printer = cfg.printer || createCliPrinter();
+  const book = createEqualBook({ dataDir: cfg.dataDir, printer });
   const httpSrv = book.listenHttp(cfg.listenHttp || 0);
   httpSrv.listen(() => {
     console.log(`gnfp equal-book http 0.0.0.0:${cfg.listenHttp || httpSrv.address()?.port} chain=${GNFP_BOOK.id}`);
@@ -29,17 +31,25 @@ export function startEqualNode(cfg = {}) {
   }
   let sync = null;
   if (cfg.pullHost) {
+    const report = createSyncReporter(printer);
     sync = startSyncLoop({
       hubHost: cfg.pullHost,
       hubStratum: cfg.pullPort || 1474,
       tls: cfg.tls !== false,
       dataDir: cfg.dataDir,
       pollMs: cfg.pollMs,
+      onProgress: (ev) => printer.syncProgress(ev),
       onAdopt: (got) => {
         if (got.ok && got.book) book.adoptRemote(got.book);
+        report(got);
       },
-      onError: () => {
-        /* peer gone — this node stays the live book */
+      onError: (err) => {
+        const peer = `${cfg.pullHost}:${cfg.pullPort || 1474}`;
+        if (isTransientSyncError(err)) {
+          console.error(formatSyncTimeout({ peer }));
+          return;
+        }
+        console.error(`sync error peer=${peer} — ${err?.message || err}`);
       },
     });
   }
@@ -57,7 +67,8 @@ export function loadEqualTls(cfg = {}) {
   };
 }
 
-export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
+export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {}) {
+  const emit = printer || null;
   const loaded = dataDir ? loadNodeStore(dataDir).book : null;
   let blocks = extractChain(loaded);
   let height = blocks.length ? heightOf(blocks[blocks.length - 1]) : Number(loaded?.height || 0);
@@ -133,20 +144,28 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
     height = nextHeight;
     nextJob();
     persist();
+    if (emit) {
+      emit.blockFound(sealed);
+      emit.tipHeight({ height, hash: sealed.hash });
+    }
     return {
       accepted: true,
       asset: GNFP_BOOK.coin,
-      block: { formed: true, height, hash: sealed.hash },
+      block: { formed: true, height, hash: sealed.hash, ...sealed },
+      sealed,
     };
   }
 
   function adoptRemote(remote, incoming) {
     if (remote && Array.isArray(remote.blocks) && incoming == null) {
-      blocks = extractChain(remote);
-      height = blocks.length ? heightOf(blocks[blocks.length - 1]) : Number(remote.height || 0);
-      persist();
+      const next = extractChain(remote);
+      const nextHeight = next.length ? heightOf(next[next.length - 1]) : Number(remote.height || 0);
+      const same = nextHeight === height && tipHashOf(next) === tipHashOf(blocks);
+      blocks = next;
+      height = nextHeight;
+      if (!same) persist();
       nextJob();
-      return { ok: true, tip: tip(), sameTip: true };
+      return { ok: true, tip: tip(), sameTip: same };
     }
     const got = applyIncremental(
       { blocks, height, book: GNFP_BOOK.id, coin: GNFP_BOOK.coin },
@@ -206,16 +225,32 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
-        const raw = Buffer.concat(chunks).toString('utf8');
-        const hit = handleApi(req.url || '/', req.method || 'GET', raw);
-        const buf = Buffer.from(JSON.stringify(hit.json));
-        res.writeHead(hit.status, {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Content-Length': buf.length,
-        });
-        res.end(buf);
+        try {
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const hit = handleApi(req.url || '/', req.method || 'GET', raw);
+          const buf = Buffer.from(JSON.stringify(hit.json));
+          res.writeHead(hit.status, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Content-Length': buf.length,
+          });
+          res.end(buf);
+        } catch (err) {
+          const buf = Buffer.from(JSON.stringify({
+            ok: false,
+            reason: 'bad_request',
+            error: String(err?.message || err),
+          }));
+          res.writeHead(400, {
+            'Content-Type': 'application/json',
+            'Content-Length': buf.length,
+          });
+          res.end(buf);
+        }
       });
+    });
+    server.on('error', (err) => {
+      console.error(`gnfp-node http bind failed :${port} — ${err.code || err.message} (CLI keeps running)`);
     });
     return {
       listen: (cb) => server.listen(port, '0.0.0.0', cb),
@@ -268,6 +303,9 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
       sock.on('error', () => miners.delete(sock));
     };
     const server = tlsOpts ? tls.createServer(tlsOpts, onSock) : net.createServer(onSock);
+    server.on('error', (err) => {
+      console.error(`gnfp-node stratum bind failed :${port} — ${err.code || err.message} (CLI keeps running)`);
+    });
     return {
       listen: (cb) => server.listen(port, '0.0.0.0', cb),
       close: () => new Promise((r) => server.close(r)),

@@ -12,13 +12,7 @@ export function hubBaseUrl({ hubHost, hubStratum, tls } = {}) {
   return `${scheme}://${host}:${port}`;
 }
 
-export function hubGetJson(url, { timeoutMs = 8000, fetchImpl } = {}) {
-  if (typeof fetchImpl === 'function') {
-    return Promise.resolve(fetchImpl(url)).then(async (res) => {
-      if (res && typeof res.json === 'function') return res.json();
-      return res;
-    });
-  }
+function getJsonOnce(url, { timeoutMs = 20_000 } = {}) {
   return new Promise((resolve, reject) => {
     let parsed;
     try {
@@ -58,4 +52,26 @@ export function hubGetJson(url, { timeoutMs = 8000, fetchImpl } = {}) {
     });
     req.end();
   });
+}
+
+export async function hubGetJson(url, { timeoutMs = 20_000, fetchImpl, retries = 2 } = {}) {
+  if (typeof fetchImpl === 'function') {
+    return Promise.resolve(fetchImpl(url)).then(async (res) => {
+      if (res && typeof res.json === 'function') return res.json();
+      return res;
+    });
+  }
+  let lastErr;
+  const attempts = Math.max(1, Number(retries) + 1);
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await getJsonOnce(url, { timeoutMs });
+    } catch (err) {
+      lastErr = err;
+      if (i + 1 < attempts) {
+        await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
 }

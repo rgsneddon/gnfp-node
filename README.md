@@ -2,7 +2,7 @@
 
 Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore are **equal peers**, not masters. If a peer drops, this node keeps the tip, accepts miners, and continues the book.
 
-**Pin:** `1.0.6`  
+**Pin:** `1.0.8`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
@@ -11,7 +11,7 @@ Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore 
 |---|---|
 | Wallet **0.1.2** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.2 |
 | Miner **GNFPHash 1.0.1** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.1 |
-| Node **1.0.6** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.0.6 |
+| Node **1.0.8** | https://github.com/rgsneddon/gnfp-node |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
 
@@ -22,7 +22,6 @@ Needs **Node.js 18+**. No `npm install`.
 ```bash
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-git checkout v1.0.6
 node src/node.js
 ```
 
@@ -31,13 +30,22 @@ Windows:
 ```bat
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-git checkout v1.0.6
 node src\node.js
 ```
 
 Or `pack\win\gnfp-node.cmd` / `./pack/unix/gnfp-node`.
 
-That starts a full equal book: local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). Leave it running. First sync can take a few minutes.
+That starts a full equal book: local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). The CLI prints **watching seeds**, **sync** progress (`local/network`), then a **tip-height** line whenever the book advances. A miner that seals a block here prints **block found** plus the full sealed block.
+
+### Help topics
+
+```bash
+node src/node.js help
+node src/node.js help run
+node src/node.js help sync
+node src/node.js help mine
+node src/node.js help data
+```
 
 ### Check it
 
@@ -117,8 +125,10 @@ Roles: `join` · `pool` · `solo`.
 --tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
 --tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
 --print-config
---help
+--help [topic]      overview, or run / sync / mine / data
 ```
+
+The book is stored compressed (`tip.json` + append-only `blocks.jsonl.gz`) so a long chain is not rewritten every poll.
 
 ## What this is (and is not)
 

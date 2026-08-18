@@ -45,6 +45,25 @@ test('lone node settles a miner share and keeps the tip after restart', () => {
   assert.notEqual(b.tip().height, 0);
 });
 
+test('busy port bind does not throw an uncaught exception', async () => {
+  const blocker = net.createServer();
+  await new Promise((r) => blocker.listen(0, '0.0.0.0', r));
+  const port = blocker.address().port;
+  const uncaught = [];
+  const onUnc = (err) => { uncaught.push(err); };
+  process.on('uncaughtException', onUnc);
+  try {
+    const book = createEqualBook({ bits: 1 });
+    const http = book.listenHttp(port);
+    http.listen(() => {});
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(uncaught.length, 0, uncaught[0] && uncaught[0].message);
+  } finally {
+    process.off('uncaughtException', onUnc);
+    await new Promise((r) => blocker.close(r));
+  }
+});
+
 test('when the peer is gone the lone book still accepts miners', async () => {
   const dir = scratchDir();
   const book = createEqualBook({ dataDir: dir, bits: 1 });

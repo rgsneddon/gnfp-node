@@ -2,18 +2,20 @@
  * Pull tip + incremental blocks from the master book and verify-before-adopt.
  */
 import http from 'http';
-import { applyIncremental, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
+import { applyIncremental, CATCHUP_PULL_LIMIT, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
 import { extractChain, heightOf } from './chronoflux_chain.js';
+import { SEED_NODES } from './cli_status.js';
 import { hubBaseUrl, hubGetJson } from './hub_http.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 
-export function localCursor(book) {
+export function localCursor(book, { limit = CATCHUP_PULL_LIMIT } = {}) {
   const chain = extractChain(book);
   const last = chain.at(-1);
+  const n = Math.max(1, Math.floor(Number(limit) || CATCHUP_PULL_LIMIT));
   return {
     afterHeight: last ? heightOf(last, -1) : Math.max(-1, Math.floor(Number(book?.height ?? -1))),
     afterHash: last ? String(last.hash || '') : String(book?.tipHash || ''),
-    limit: 64,
+    limit: n,
   };
 }
 
@@ -24,48 +26,159 @@ export async function syncOnce({
   book = null,
   dataDir = '',
   fetchImpl,
-  timeoutMs = 8000,
+  timeoutMs = 20_000,
+  batchLimit = CATCHUP_PULL_LIMIT,
+  onProgress,
 } = {}) {
   const local = book || (dataDir ? loadNodeStore(dataDir).book : null);
-  const base = hubBaseUrl({ hubHost, hubStratum, tls });
-  const tip = await hubGetJson(`${base}/api/tip`, { fetchImpl, timeoutMs });
+  const loopback = hubHost === '127.0.0.1' || hubHost === 'localhost';
+  const peers = [{ host: hubHost, port: hubStratum }];
+  if (!fetchImpl && !loopback) {
+    for (const s of SEED_NODES) {
+      if (s.host !== hubHost) peers.push({ host: s.host, port: s.port });
+    }
+  }
+  let tip = null;
+  let usedHost = hubHost;
+  let usedPort = hubStratum;
+  let lastErr = null;
+  for (const p of peers) {
+    try {
+      const tryBase = hubBaseUrl({ hubHost: p.host, hubStratum: p.port, tls });
+      const got = await hubGetJson(`${tryBase}/api/tip`, { fetchImpl, timeoutMs });
+      if (got && typeof got === 'object') {
+        tip = got;
+        usedHost = p.host;
+        usedPort = p.port;
+        lastErr = null;
+        break;
+      }
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  const peer = `${usedHost}:${usedPort}`;
   if (!tip || typeof tip !== 'object') {
-    return { ok: false, reason: 'bad_tip' };
+    if (lastErr) throw lastErr;
+    return { ok: false, reason: 'bad_tip', peer };
   }
-  const cur = localCursor(local);
-  const sameHeight = Number(tip.height ?? tip.tip) === Number(local?.height ?? local?.tip);
-  const sameHash = tip.tipHash && cur.afterHash && String(tip.tipHash) === cur.afterHash;
-  if (local && sameHeight && sameHash) {
-    return { ok: true, sameTip: true, book: local };
+  const base = hubBaseUrl({ hubHost: usedHost, hubStratum: usedPort, tls });
+  const networkHeight = Number(tip.height ?? tip.tip ?? 0) || 0;
+  const identOf = (b) => {
+    const chain = extractChain(b);
+    const last = chain.at(-1);
+    return {
+      height: last ? heightOf(last, 0) : Number(b?.height ?? b?.tip ?? 0) || 0,
+      hash: last ? String(last.hash || '') : String(b?.tipHash || ''),
+    };
+  };
+  let current = local;
+  let here = identOf(current);
+  const progress = (got) => {
+    if (typeof onProgress === 'function') {
+      onProgress({
+        localHeight: got.height,
+        networkHeight,
+        peer,
+        tipHash: got.hash,
+      });
+    }
+  };
+  if (current && here.height === networkHeight && tip.tipHash && here.hash && String(tip.tipHash) === here.hash) {
+    return {
+      ok: true,
+      sameTip: true,
+      book: current,
+      localHeight: here.height,
+      networkHeight,
+      tipHash: here.hash,
+      peer,
+    };
   }
-  const q = new URLSearchParams({
-    afterHeight: String(cur.afterHeight),
-    afterHash: cur.afterHash,
-    limit: String(cur.limit),
-    incremental: '1',
-  });
-  const pulled = await hubGetJson(`${base}/api/blocks?${q}`, { fetchImpl, timeoutMs });
-  const incoming = Array.isArray(pulled?.blocks) ? pulled.blocks : [];
-  const adopted = applyIncremental(local, tip, incoming);
-  if (!adopted.ok) return adopted;
-  if (dataDir) saveNodeStore(dataDir, adopted.book);
-  return adopted;
+  const maxBatches = 10_000;
+  for (let i = 0; i < maxBatches; i += 1) {
+    progress(here);
+    const cur = localCursor(current, { limit: batchLimit });
+    const q = new URLSearchParams({
+      afterHeight: String(cur.afterHeight),
+      afterHash: cur.afterHash,
+      limit: String(cur.limit),
+      incremental: '1',
+    });
+    const pulled = await hubGetJson(`${base}/api/blocks?${q}`, { fetchImpl, timeoutMs });
+    const incoming = Array.isArray(pulled?.blocks) ? pulled.blocks : [];
+    if (!incoming.length) {
+      here = identOf(current);
+      const atTip = here.height >= networkHeight
+        && (!tip.tipHash || !here.hash || String(tip.tipHash) === here.hash);
+      return {
+        ok: true,
+        sameTip: atTip,
+        book: current,
+        localHeight: here.height,
+        networkHeight,
+        tipHash: here.hash,
+        peer,
+        reason: atTip ? undefined : 'empty_pull',
+      };
+    }
+    const adopted = applyIncremental(current, tip, incoming);
+    if (!adopted.ok) {
+      return {
+        ...adopted,
+        localHeight: here.height,
+        networkHeight,
+        peer,
+      };
+    }
+    current = adopted.book;
+    here = identOf(current);
+    if (dataDir) saveNodeStore(dataDir, current);
+    const more = pulled?.more === true;
+    const atTip = here.height >= networkHeight
+      && (!tip.tipHash || String(tip.tipHash) === here.hash);
+    if (atTip || !more) {
+      progress(here);
+      return {
+        ...adopted,
+        book: current,
+        sameTip: atTip,
+        localHeight: here.height,
+        networkHeight,
+        tipHash: here.hash,
+        peer,
+      };
+    }
+  }
+  return {
+    ok: false,
+    reason: 'catchup_limit',
+    book: current,
+    localHeight: here.height,
+    networkHeight,
+    peer,
+  };
 }
 
 export function startSyncLoop(opts = {}) {
   const every = Math.max(1000, Number(opts.pollMs) || 4000);
   let stopped = false;
+  let busy = false;
   const tick = async () => {
-    if (stopped) return;
+    if (stopped || busy) return;
+    busy = true;
     try {
       const got = await syncOnce(opts);
       if (got.ok && opts.onAdopt) opts.onAdopt(got);
     } catch (err) {
       if (opts.onError) opts.onError(err);
+    } finally {
+      busy = false;
     }
   };
+  // Must stay referenced — this is the node's heartbeat. unref() let the
+  // process exit as soon as HTTP/stratum bind failed or those servers closed.
   const timer = setInterval(tick, every);
-  if (typeof timer.unref === 'function') timer.unref();
   tick();
   return {
     stop() {

@@ -11,6 +11,7 @@ import { parsePullQuery, pullPayload, tipIdentity, wantsIncrementalPull } from '
 import { loadNodeStore, saveNodeStore, defaultDataDir } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
 import { defaultUseTls } from './stratum_tls.js';
+import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
 
 export const DEFAULT_HUB_HOST = GNFP_BOOK.host;
 export const DEFAULT_HUB_STRATUM = GNFP_BOOK.port;
@@ -72,6 +73,9 @@ export function relayStratumSocket(minerSock, { hubHost, hubStratum, tls: useTls
 export function createJoinStratumServer(opts = {}) {
   const cfg = { ...joinConfig(), ...opts };
   const server = net.createServer((sock) => relayStratumSocket(sock, cfg));
+  server.on('error', (err) => {
+    console.error(`gnfp-node join stratum bind failed :${cfg.listenStratum} — ${err.code || err.message} (CLI keeps running)`);
+  });
   return {
     listen: (cb) => server.listen(cfg.listenStratum, '0.0.0.0', cb),
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -275,6 +279,9 @@ export function createJoinHttpServer({
       ok(502, { ok: false, reason: 'hub_unreachable', error: String(err?.message || err) });
     }
   });
+  server.on('error', (err) => {
+    console.error(`gnfp-node join http bind failed :${port} — ${err.code || err.message} (CLI keeps running)`);
+  });
   return {
     listen: (cb) => server.listen(port, '0.0.0.0', cb),
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -285,6 +292,7 @@ export function createJoinHttpServer({
 
 export function startJoinNode(opts = {}) {
   const cfg = { ...joinConfig(), ...opts };
+  const printer = cfg.printer || createCliPrinter();
   if (cfg.dataDir) {
     const loaded = loadNodeStore(cfg.dataDir);
     if (loaded.book) setReplicaBook(loaded.book);
@@ -306,6 +314,7 @@ export function startJoinNode(opts = {}) {
   } else {
     console.log('gnfp replica-only HTTP (no stratum)');
   }
+  const report = createSyncReporter(printer);
   const sync = startSyncLoop({
     hubHost: cfg.hubHost,
     hubStratum: cfg.hubStratum,
@@ -313,11 +322,18 @@ export function startJoinNode(opts = {}) {
     dataDir: cfg.dataDir,
     fetchImpl: opts.fetchImpl,
     pollMs: cfg.pollMs,
+    onProgress: (ev) => printer.syncProgress(ev),
     onAdopt: (got) => {
       if (got.book) setReplicaBook(got.book);
+      report(got);
     },
     onError: (err) => {
-      console.error('gnfp-node sync', err?.message || err);
+      const peer = `${cfg.hubHost}:${cfg.hubStratum}`;
+      if (isTransientSyncError(err)) {
+        console.error(formatSyncTimeout({ peer }));
+        return;
+      }
+      console.error(`sync error peer=${peer} — ${err?.message || err}`);
     },
   });
   return { http: httpSrv, stratum, cfg, sync };

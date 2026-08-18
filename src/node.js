@@ -2,48 +2,24 @@
 /**
  * gnfp-node — equal Chronoflux book. Any node can run alone.
  */
+import fs from 'fs';
+import path from 'path';
 import { startJoinNode, joinConfig } from './gnfp_join_node.js';
 import { startEqualNode } from './equal_book.js';
 import { GNFP_BOOK } from './chronoflux_chain.js';
 import { hubBaseUrl } from './hub_http.js';
 import { defaultDataDir } from './node_store.js';
+import {
+  createCliPrinter,
+  renderHelp,
+  requestedHelpTopic,
+  SEED_NODES,
+} from './cli_status.js';
 
-export const VERSION = '1.0.6';
+export const VERSION = '1.0.8';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
-export const HELP = `gnfp-node ${VERSION} — equal $GNFP Chronoflux node
-
-Usage:
-  gnfp-node
-
-Every node is a full book of the same chain (${GNFP_BOOK.id}).
-Germany (${GNFP_BOOK.stratum}) is a well-known peer, not a required master.
-If that peer drops, this node keeps the tip, accepts miners, and
-perpetuates the chain. Miners connect here directly.
-
---replica-only is pull-only (no local stratum, no local settle).
-Default is an equal book: local stratum + HTTP + persist.
-
-TLS is the shipped default. --notls is local plaintext only.
-Verify-before-adopt still rejects mutated / same-height / rollback books.
-
-Options:
-  --peer HOST:PORT    optional peer to sync from (default ${DEFAULT_HUB})
-  --pull HOST:PORT    same as --peer (dial only; does not change chain id)
-  --http-port N       local HTTP book (default 8014)
-  --stratum-port N    local miner stratum / book (default 1474)
-  --replica-only      sync/serve only — do not settle locally
-  --data-dir PATH     persist the book (default ~/.gnfp-node)
-  --poll-ms N         peer poll interval (default 4000)
-  --announce-host H   public host to register
-  --announce-url URL  announce endpoint
-  --role join|pool|solo
-  --notls             local plaintext only
-  --tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
-  --tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
-  --print-config      JSON (coin=GNFP, equalNode, TLS)
-  --help
-`;
+export const HELP = renderHelp('', VERSION);
 
 function flag(argv, name, fallback) {
   const i = argv.indexOf(name);
@@ -92,8 +68,9 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
 }
 
 export function main(argv = process.argv) {
-  if (argv.includes('--help') || argv.includes('-h')) {
-    process.stdout.write(HELP);
+  const topic = requestedHelpTopic(argv);
+  if (topic !== null) {
+    process.stdout.write(renderHelp(topic, VERSION));
     return 0;
   }
   const cfg = parseNodeArgs(argv);
@@ -110,18 +87,24 @@ export function main(argv = process.argv) {
     })}\n`);
     return 0;
   }
+  const printer = cfg.printer || createCliPrinter();
+  const peer = `${cfg.pullHost}:${cfg.pullPort}`;
+  holdProcessOpen(cfg.dataDir);
   console.log(
-    `gnfp-node ${VERSION} equal=${cfg.equalNode} peer=${cfg.pullHost}:${cfg.pullPort} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
+    `gnfp-node ${VERSION} equal=${cfg.equalNode} peer=${peer} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
   );
+  printer.watchingSeeds(SEED_NODES);
+  printer.syncStart({ peer, localHeight: 0, networkHeight: '?' });
+  const live = { ...cfg, printer };
   if (cfg.replicaOnly) {
     startJoinNode({
       ...joinConfig(),
-      ...cfg,
+      ...live,
       hubHost: cfg.pullHost,
       hubStratum: cfg.pullPort,
     });
   } else {
-    startEqualNode(cfg);
+    startEqualNode(live);
   }
   if (cfg.announceHost) {
     const beat = () => {
@@ -141,8 +124,67 @@ export function main(argv = process.argv) {
   return { cfg };
 }
 
-const here = import.meta.url;
-if (process.argv[1] && here.endsWith(process.argv[1].replace(/\\/g, '/').split('/').pop())) {
+function appendRunLog(dataDir, msg) {
+  const root = String(dataDir || defaultDataDir());
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    fs.appendFileSync(path.join(root, 'node.log'), `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Keep the CLI process alive even if both binds fail. */
+export function holdProcessOpen(dataDir = '') {
+  const root = String(dataDir || defaultDataDir());
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    const cliPath = path.join(root, 'cli.log');
+    const wrap = (stream) => {
+      const orig = stream.write.bind(stream);
+      stream.write = (chunk, enc, cb) => {
+        try { fs.appendFileSync(cliPath, chunk); } catch { /* ignore */ }
+        return orig(chunk, enc, cb);
+      };
+    };
+    wrap(process.stdout);
+    wrap(process.stderr);
+  } catch { /* ignore */ }
+  if (process.stdin && typeof process.stdin.resume === 'function') {
+    try { process.stdin.resume(); } catch { /* no tty */ }
+  }
+  const hold = setInterval(() => {
+    appendRunLog(dataDir, `alive pid=${process.pid}`);
+  }, 30_000);
+  if (typeof hold.ref === 'function') hold.ref();
+  appendRunLog(dataDir, `start pid=${process.pid} argv=${process.argv.slice(1).join(' ')}`);
+  process.on('beforeExit', (code) => {
+    appendRunLog(dataDir, `beforeExit code=${code}`);
+  });
+  process.on('exit', (code) => {
+    appendRunLog(dataDir, `exit code=${code}`);
+  });
+  return hold;
+}
+
+function isDirectRun() {
+  const arg = process.argv[1];
+  if (!arg) return false;
+  const name = String(arg).replace(/\\/g, '/').split('/').pop();
+  return import.meta.url.endsWith(name) || import.meta.url.endsWith(`${name}`.replace(/ /g, '%20'));
+}
+
+if (isDirectRun()) {
+  process.on('uncaughtException', (err) => {
+    const text = err && err.stack ? err.stack : String(err);
+    console.error(`gnfp-node error: ${text}`);
+    appendRunLog(defaultDataDir(), `uncaught ${text}`);
+  });
+  process.on('unhandledRejection', (err) => {
+    const text = err && err.message ? err.message : String(err);
+    console.error(`gnfp-node warning: ${text}`);
+    appendRunLog(defaultDataDir(), `unhandled ${text}`);
+  });
   const code = main(process.argv);
   if (typeof code === 'number') process.exit(code);
 }

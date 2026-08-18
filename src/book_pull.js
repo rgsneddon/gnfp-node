@@ -11,8 +11,9 @@ import {
 } from './chronoflux_chain.js';
 
 export const GNFP_COIN = 'GNFP';
-export const DEFAULT_PULL_LIMIT = 64;
-export const MAX_PULL_LIMIT = 256;
+export const DEFAULT_PULL_LIMIT = 256;
+export const MAX_PULL_LIMIT = 1024;
+export const CATCHUP_PULL_LIMIT = 512;
 
 export function parsePullQuery(params = {}) {
   const get = (key) => {
