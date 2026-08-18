@@ -9,6 +9,7 @@ import {
   bookLawOnTip,
   canFormBlock,
   networkDifficulty,
+  retargetBits,
 } from '../src/book_law.js';
 import { tipIdentity } from '../src/book_pull.js';
 import { hashBlock, sealBlock } from '../src/chronoflux_chain.js';
@@ -34,6 +35,12 @@ test('book law: difficulty retargets toward 90s and is not stuck at 60000', () =
   assert.ok(mid.difficultyBits >= 14, `bits ${mid.difficultyBits}`);
   const expectedSec = mid.difficulty / 280;
   assert.ok(expectedSec > 45 && expectedSec < 180, `sec ${expectedSec}`);
+
+  const jumped = retargetBits(15, 14, 90_000, { lastBlockIntervalMs: 500 });
+  assert.ok(jumped >= 19, `fast 0.5s must raise the hash target, got ${jumped}`);
+  const eased = retargetBits(15, jumped, 90_000, { lastBlockIntervalMs: 180_000 });
+  assert.ok(eased < jumped, `slow 180s must ease the hash target, ${eased} vs ${jumped}`);
+  assert.equal(canFormBlock({ blockHashMet: false, lastBlockIntervalMs: 500_000 }), false);
 
   const fast = networkDifficulty({ hashrate: 10_000 });
   assert.ok(fast.difficulty > mid.difficulty, `fast=${fast.difficulty} mid=${mid.difficulty}`);

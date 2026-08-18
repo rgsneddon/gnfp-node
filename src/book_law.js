@@ -41,14 +41,30 @@ export function blockBitsFromHashrate(hashrate, intervalMs = TARGET_BLOCK_INTERV
   return Math.max(LIVE_MIN_DIFFICULTY_BITS, clampDifficultyBits(nearest));
 }
 
-/** At most one bit per step. Never below the live 90s floor. */
-export function retargetBits(hashrate, previousBits, intervalMs = TARGET_BLOCK_INTERVAL_MS) {
-  const next = blockBitsFromHashrate(hashrate, intervalMs);
-  const prev = Math.floor(Number(previousBits) || 0);
-  if (!Number.isFinite(prev) || prev < LIVE_MIN_DIFFICULTY_BITS) return next;
-  if (next > prev) return Math.min(MAX_DIFFICULTY_BITS, prev + 1);
-  if (next < prev) return Math.max(LIVE_MIN_DIFFICULTY_BITS, prev - 1);
-  return next;
+/**
+ * Quick 90s retarget from the last real block interval.
+ * 0.5s blocks at 14 bits → +8 bits in one step (not +1).
+ * Hashrate is a fallback only when no interval has been seen.
+ */
+export function retargetBits(
+  hashrate,
+  previousBits,
+  intervalMs = TARGET_BLOCK_INTERVAL_MS,
+  observed = {},
+) {
+  const target = Math.max(1, Number(intervalMs) || TARGET_BLOCK_INTERVAL_MS);
+  const prevRaw = Math.floor(Number(previousBits) || 0);
+  const prev = prevRaw >= LIVE_MIN_DIFFICULTY_BITS ? prevRaw : GENESIS_DIFFICULTY_BITS;
+  const seen = Number(observed.lastBlockIntervalMs ?? observed.intervalMs ?? 0);
+  if (Number.isFinite(seen) && seen > 0) {
+    const ratio = target / seen;
+    const delta = Math.round(Math.log2(Math.max(1 / 256, Math.min(256, ratio))));
+    return Math.max(
+      LIVE_MIN_DIFFICULTY_BITS,
+      Math.min(MAX_DIFFICULTY_BITS, prev + delta),
+    );
+  }
+  return Math.max(LIVE_MIN_DIFFICULTY_BITS, blockBitsFromHashrate(hashrate, target));
 }
 
 /**
