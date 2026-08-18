@@ -2,8 +2,10 @@
  * Equal Chronoflux book: any node can perpetuate the same chain alone.
  * Germany is a well-known peer, not a required master.
  */
+import fs from 'fs';
 import http from 'http';
 import net from 'net';
+import tls from 'tls';
 import { GNFP_BOOK, extractChain, heightOf, sealBlock, tipHashOf } from './chronoflux_chain.js';
 import { applyIncremental, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
 import { hashMeetsJob } from './cpu_pow.js';
@@ -18,9 +20,11 @@ export function startEqualNode(cfg = {}) {
   });
   let stratum = null;
   if (!cfg.replicaOnly) {
-    stratum = book.listenStratum(cfg.listenStratum || 0);
+    const tlsOpts = loadEqualTls(cfg);
+    stratum = book.listenStratum(cfg.listenStratum || 0, tlsOpts);
     stratum.listen(() => {
-      console.log(`gnfp equal-book stratum 0.0.0.0:${cfg.listenStratum || stratum.address()?.port} (local book, not a relay)`);
+      const mode = tlsOpts ? 'tls' : 'tcp';
+      console.log(`gnfp equal-book stratum ${mode} 0.0.0.0:${cfg.listenStratum || stratum.address()?.port} (local book, not a relay)`);
     });
   }
   let sync = null;
@@ -40,6 +44,17 @@ export function startEqualNode(cfg = {}) {
     });
   }
   return { book, http: httpSrv, stratum, sync };
+}
+
+export function loadEqualTls(cfg = {}) {
+  const cert = String(cfg.tlsCert || process.env.GNFP_TLS_CERT || '').trim();
+  const key = String(cfg.tlsKey || process.env.GNFP_TLS_KEY || '').trim();
+  if (!cert || !key) return null;
+  if (!fs.existsSync(cert) || !fs.existsSync(key)) return null;
+  return {
+    cert: fs.readFileSync(cert),
+    key: fs.readFileSync(key),
+  };
 }
 
 export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
@@ -172,6 +187,11 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
         },
       };
     }
+    if ((path === '/api/sync' || path === '/gnfp/api/sync') && String(method).toUpperCase() === 'POST') {
+      const payload = typeof body === 'string' ? JSON.parse(body || '{}') : (body || {});
+      const got = adoptRemote(payload, payload.blocks);
+      return { status: got.ok ? 200 : 409, json: { ...got, coin: GNFP_BOOK.coin } };
+    }
     if (path === '/api/job') return { status: 200, json: job || nextJob() };
     if ((path === '/api/submit' || path === '/gnfp/api/submit') && String(method).toUpperCase() === 'POST') {
       const payload = typeof body === 'string' ? JSON.parse(body || '{}') : (body || {});
@@ -205,8 +225,8 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
     };
   }
 
-  function listenStratum(port = 0) {
-    const server = net.createServer((sock) => {
+  function listenStratum(port = 0, tlsOpts = null) {
+    const onSock = (sock) => {
       miners.add(sock);
       let buf = '';
       const send = (obj) => {
@@ -246,7 +266,8 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
       });
       sock.on('close', () => miners.delete(sock));
       sock.on('error', () => miners.delete(sock));
-    });
+    };
+    const server = tlsOpts ? tls.createServer(tlsOpts, onSock) : net.createServer(onSock);
     return {
       listen: (cb) => server.listen(port, '0.0.0.0', cb),
       close: () => new Promise((r) => server.close(r)),

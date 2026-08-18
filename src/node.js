@@ -8,7 +8,7 @@ import { GNFP_BOOK } from './chronoflux_chain.js';
 import { hubBaseUrl } from './hub_http.js';
 import { defaultDataDir } from './node_store.js';
 
-export const VERSION = '1.0.4';
+export const VERSION = '1.0.5';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = `gnfp-node ${VERSION} — equal $GNFP Chronoflux node
@@ -80,6 +80,8 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
       env.GNFP_ANNOUNCE_URL || 'https://explorer.restoreprivacy.online/api/nodes',
     ),
     role: flag(argv, '--role', 'book'),
+    tlsCert: flag(argv, '--tls-cert', env.GNFP_TLS_CERT || ''),
+    tlsKey: flag(argv, '--tls-key', env.GNFP_TLS_KEY || ''),
     tls,
     verifyBeforeAdopt: true,
     equalNode: !argv.includes('--replica-only'),

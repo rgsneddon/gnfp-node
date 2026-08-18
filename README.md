@@ -2,7 +2,7 @@
 
 Run **your own $GNFP node**. Every node is an **equal Chronoflux book** of the same chain. Germany is a well-known peer, not a required master. If that peer drops, this node keeps the tip, accepts miners, and continues the chain.
 
-**Pin:** `1.0.4`  
+**Pin:** `1.0.5`  
 **Coin:** GNFP  
 **Chain id:** `gnfp-germany-book-v1` (immutable). Hosts are peers.  
 TLS default; `--notls` is local plaintext only.
@@ -58,6 +58,8 @@ Useful flags:
 --data-dir PATH     persist adopted tip (default ~/.gnfp-node)
 --poll-ms N         how often to pull the tip (default 4000)
 --notls             local plaintext only
+--tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
+--tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
 --print-config      JSON (coin=GNFP, hub, TLS)
 --help
 ```
