@@ -34,7 +34,7 @@ test('lone node settles a miner share and keeps the tip after restart', () => {
     username: 'gnfp1alice.worker',
     nonce,
     jobId: job.jobId,
-    client: 'gnfp-mine',
+    client: 'GNFPHash',
   });
   assert.equal(got.accepted, true, got.reason);
   assert.equal(a.tip().height, 1);
@@ -71,7 +71,7 @@ test('when the peer is gone the lone book still accepts miners', async () => {
             login: 'gnfp1bob.worker',
             nonce,
             jobId: msg.jobId,
-            client: 'gnfp-mine',
+            client: 'GNFPHash',
             id: 2,
           })}\n`);
         }

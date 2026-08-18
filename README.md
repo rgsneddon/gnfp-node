@@ -9,7 +9,7 @@ TLS default; `--notls` is local plaintext only.
 
 - Explorer: https://explorer.restoreprivacy.online
 - Pool: https://gnfp.restoreprivacy.online
-- Miner: [gnfp-mine 1.0.9](https://github.com/rgsneddon/gnfp-mine)
+- Miner: [GNFPHash 1.0.0](https://github.com/rgsneddon/GNFPHash)
 
 ## What this is (and is not)
 

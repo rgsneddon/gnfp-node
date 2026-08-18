@@ -98,7 +98,7 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
       difficulty: bits,
       input: `gnfp-equal-${h}-${jobSeq}`,
       preWork: `gnfp-equal-${h}-${jobSeq}`,
-      algorithm: 'gnfp-cpu-v1',
+      algorithm: 'GNFPHash',
     };
     return job;
   }
@@ -108,8 +108,8 @@ export function createEqualBook({ dataDir = '', bits = 1 } = {}) {
     if (jobId && String(jobId) !== String(current.jobId) && String(jobId) !== String(current.id)) {
       return { accepted: false, reason: 'stale_job', asset: GNFP_BOOK.coin };
     }
-    if (String(client || '') && String(client) !== 'gnfp-mine') {
-      return { accepted: false, reason: 'client_refused', asset: GNFP_BOOK.coin };
+    if (String(client || '') && String(client) !== 'GNFPHash') {
+      return { accepted: false, reason: 'old_miner_refused', asset: GNFP_BOOK.coin };
     }
     if (!hashMeetsJob(current, nonce, '')) {
       return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };

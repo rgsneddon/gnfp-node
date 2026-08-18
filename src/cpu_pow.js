@@ -1,8 +1,9 @@
-/** Same gnfp-cpu-v1 work hash the book and gnfp-mine use. */
+/** Same GNFPHash-v1 work hash the book and official miner use. */
 import { createHash } from 'crypto';
 
 export const CPU_HASH_ROUNDS = 8;
-export const CPU_HASH_PERSONAL = 'gnfp-cpu-v1';
+export const CPU_HASH_PERSONAL = 'GNFPHash-v1';
+export const ALGORITHM = 'GNFPHash';
 
 export function gnfpWorkHash(preWork, nonce, solution = '') {
   const pre = String(preWork || '');
@@ -10,6 +11,7 @@ export function gnfpWorkHash(preWork, nonce, solution = '') {
   const sol = String(solution || '');
   let acc = createHash('sha256')
     .update(CPU_HASH_PERSONAL, 'utf8')
+    .update(ALGORITHM, 'utf8')
     .update(pre, 'utf8')
     .update(n, 'utf8')
     .update(sol, 'utf8')
@@ -17,6 +19,7 @@ export function gnfpWorkHash(preWork, nonce, solution = '') {
   for (let i = 0; i < CPU_HASH_ROUNDS; i += 1) {
     acc = createHash('sha256')
       .update(acc)
+      .update(CPU_HASH_PERSONAL, 'utf8')
       .update(String(i))
       .update(pre, 'utf8')
       .update(n, 'utf8')
