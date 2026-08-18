@@ -70,19 +70,19 @@ export function requestedHelpTopic(argv = process.argv) {
 
 export function helpOverview(version = '') {
   const ver = version ? ` ${version}` : '';
-  return `gnfp-node${ver} — equal $GNFP Chronoflux node
+  return `gnfp-node${ver} — $GNFP Chronoflux node (join by default)
 
 Usage:
   gnfp-node [options]
   gnfp-node help [topic]
 
-Every node is a full book of the same chain (${GNFP_BOOK.id}).
+Every node syncs the same chain (${GNFP_BOOK.id}).
 Germany (${GNFP_BOOK.stratum}) is a well-known peer, not a required master.
-If that peer drops, this node keeps the tip, accepts miners, and
-perpetuates the chain. Miners connect here directly.
 
---replica-only is pull-only (no local stratum, no local settle).
-Default is an equal book: local stratum + HTTP + persist.
+Default is join from launch: local stratum + HTTP that relay miners into
+the live book. Shares accepted here are the same shares the hub accepts.
+--replica-only is pull-only (no local stratum).
+--equal / --book starts a local minting book (operator only; can fork).
 
 TLS is the shipped default. --notls is local plaintext only.
 Verify-before-adopt still rejects mutated / same-height / rollback books.
@@ -98,6 +98,8 @@ Options:
   --pull HOST:PORT    same as --peer (dial only; does not change chain id)
   --http-port N       local HTTP book (default 8014)
   --stratum-port N    local miner stratum / book (default 1474)
+  --join              join the live book (default; on from launch)
+  --equal / --book    local minting book (not the default)
   --replica-only      sync/serve only — do not settle locally
   --data-dir PATH     persist the book (default ~/.gnfp-node)
   --poll-ms N         how often to pull the tip (default 4000)
@@ -107,7 +109,7 @@ Options:
   --notls             local plaintext only
   --tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
   --tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
-  --print-config      JSON (coin=GNFP, equalNode, TLS)
+  --print-config      JSON (coin=GNFP, join, equalNode, TLS)
   --help [topic]      this page, or a help topic
 `;
 }
@@ -117,7 +119,7 @@ export function helpTopicPage(topic, version = '') {
   if (t === 'run') {
     return `gnfp-node help run${version ? ` (${version})` : ''}
 
-Start a full equal book (local stratum :1474 + HTTP :8014):
+Start a join node (local stratum :1474 + HTTP :8014, live book):
 
   gnfp-node
   gnfp-node --notls --data-dir .\\my-book
@@ -132,7 +134,7 @@ The CLI prints ongoing output:
   2. sync start — local height vs network tip-height
   3. sync LOCAL/NETWORK (PCT%) — progress while catching up
   4. tip-height N hash=… — one new line each time the tip advances
-  5. block found {…} — full sealed block when a miner forms a block here
+  5. miners on this node are relayed to the live book (join)
 
 Leave it running. First sync can take a minute on a tall book; later
 restarts resume from the on-disk tip (see: gnfp-node help data).
@@ -140,6 +142,10 @@ restarts resume from the on-disk tip (see: gnfp-node help data).
 Replica-only (HTTP, no local miners):
 
   gnfp-node --replica-only --http-port 8014
+
+Local minting book (operator only — can fork the tip):
+
+  gnfp-node --equal
 `;
   }
   if (t === 'sync') {
@@ -185,16 +191,13 @@ Public seed (TLS):
 Use a real gnfp1 address. Local stratum is plaintext unless you pass
 --tls-cert / --tls-key (or GNFP_TLS_CERT / GNFP_TLS_KEY).
 
-A miner hashing here is a solo miner. This node reports it to the
-explorer and live book (POST /api/nodes role=solo) so the pool page
-Solo table can list it. The explorer is a view of that book — it does
-not need its own chain.
+A miner hashing here is a solo miner. Join relays its shares into the
+live book. This node reports it to the explorer (POST /api/nodes
+role=solo) so the explorer Solo table can list it.
 
-When a share seals a block here the CLI prints:
+When a share seals a block on the live book the hub prints:
 
   block found {height, hash, previousHash, miner, amount, …}
-
-that line is the full sealed block data-stream, then a tip-height line.
 `;
   }
   if (t === 'data') {

@@ -12,6 +12,7 @@ import { loadNodeStore, saveNodeStore, defaultDataDir } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
 import { defaultUseTls } from './stratum_tls.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
+import { loadOrCreateSoloHost, startSoloAnnounceLoop } from './solo_announce.js';
 
 export const DEFAULT_HUB_HOST = GNFP_BOOK.host;
 export const DEFAULT_HUB_STRATUM = GNFP_BOOK.port;
@@ -72,7 +73,13 @@ export function relayStratumSocket(minerSock, { hubHost, hubStratum, tls: useTls
 
 export function createJoinStratumServer(opts = {}) {
   const cfg = { ...joinConfig(), ...opts };
-  const server = net.createServer((sock) => relayStratumSocket(sock, cfg));
+  let miners = 0;
+  const server = net.createServer((sock) => {
+    miners += 1;
+    sock.on('close', () => { miners = Math.max(0, miners - 1); });
+    sock.on('error', () => { miners = Math.max(0, miners - 1); });
+    relayStratumSocket(sock, cfg);
+  });
   server.on('error', (err) => {
     console.error(`gnfp-node join stratum bind failed :${cfg.listenStratum} — ${err.code || err.message} (CLI keeps running)`);
   });
@@ -80,6 +87,7 @@ export function createJoinStratumServer(opts = {}) {
     listen: (cb) => server.listen(cfg.listenStratum, '0.0.0.0', cb),
     close: () => new Promise((resolve) => server.close(resolve)),
     address: () => server.address(),
+    minerCount: () => miners,
     server,
   };
 }
@@ -314,6 +322,15 @@ export function startJoinNode(opts = {}) {
   } else {
     console.log('gnfp replica-only HTTP (no stratum)');
   }
+  const soloHost = cfg.announceHost || loadOrCreateSoloHost(cfg.dataDir);
+  const solo = startSoloAnnounceLoop(
+    () => ({
+      host: soloHost,
+      port: cfg.listenStratum || 1474,
+      threads: stratum && typeof stratum.minerCount === 'function' ? stratum.minerCount() : 0,
+    }),
+    { announceUrl: cfg.announceUrl, fetchImpl: opts.fetchImpl },
+  );
   const report = createSyncReporter(printer);
   const sync = startSyncLoop({
     hubHost: cfg.hubHost,
@@ -336,7 +353,7 @@ export function startJoinNode(opts = {}) {
       console.error(`sync error peer=${peer} — ${err?.message || err}`);
     },
   });
-  return { http: httpSrv, stratum, cfg, sync };
+  return { http: httpSrv, stratum, cfg, sync, solo };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

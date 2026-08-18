@@ -1,6 +1,6 @@
 /**
- * Solo miners on a local equal book check in to the live book / explorer
- * so the pool page Solo table can list them. No extra node type.
+ * Solo miners on a local join (or equal) node check in to the live book /
+ * explorer so the explorer Solo table can list them. No extra node type.
  */
 import fs from 'fs';
 import os from 'os';

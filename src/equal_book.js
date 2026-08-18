@@ -302,6 +302,9 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
           if (method === 'login') {
             send({ id: msg.id, result: true, description: 'Login Successful', coin: GNFP_BOOK.coin });
             send({ method: 'job', ...nextJob() });
+            for (const hook of shareHooks) {
+              try { hook(); } catch { /* solo announce */ }
+            }
           } else if (method === 'submit') {
             const got = submitShare({
               username: msg.login || msg.user,

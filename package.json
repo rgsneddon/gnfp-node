@@ -1,7 +1,7 @@
 {
   "name": "gnfp-node",
-  "version": "1.0.9",
-  "description": "Equal Chronoflux gnfp-node: live CLI, help topics, compact book",
+  "version": "1.0.10",
+  "description": "GNFP Chronoflux node: join-by-default, live CLI, compact book",
   "type": "module",
   "bin": {
     "gnfp-node": "src/node.js"

@@ -21,6 +21,8 @@ test('cli help names GNFP join node', () => {
   assert.match(r.stdout, /TLS is the shipped default/);
   assert.match(r.stdout, /Verify-before-adopt/);
   assert.match(r.stdout, /--notls/);
+  assert.match(r.stdout, /join from launch/);
+  assert.match(r.stdout, /--join/);
 });
 
 test('parse args default to Germany book', () => {
@@ -41,8 +43,14 @@ test('parse args default to Germany book', () => {
   assert.equal(j.tls, true);
   assert.match(String(j.hubHttp), /de\.restoreprivacy\.online:1474/);
   assert.equal(j.verifyBeforeAdopt, true);
-  assert.equal(j.equalNode, true);
-  assert.equal(j.emissionBook, true);
+  assert.equal(j.join, true);
+  assert.equal(j.equalNode, false);
+  assert.equal(j.emissionBook, false);
+  assert.equal(j.role, 'join');
+  const equal = parseNodeArgs(['node', 'node.js', '--equal']);
+  assert.equal(equal.join, false);
+  assert.equal(equal.equalNode, true);
+  assert.equal(equal.emissionBook, true);
   const ann = parseNodeArgs([
     'node', 'node.js', '--announce-host', 'mynode.example', '--role', 'pool',
   ]);

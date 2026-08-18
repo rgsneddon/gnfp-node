@@ -1,8 +1,8 @@
 # gnfp-node
 
-Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore are **equal peers**, not masters. If a peer drops, this node keeps the tip, accepts miners, and continues the book.
+Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live book. Germany and Singapore are well-known peers, not masters.
 
-**Pin:** `1.0.9`  
+**Pin:** `1.0.10`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
@@ -11,7 +11,7 @@ Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore 
 |---|---|
 | Wallet **0.1.2** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.2 |
 | Miner **GNFPHash 1.0.1** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.1 |
-| Node **1.0.9** | https://github.com/rgsneddon/gnfp-node |
+| Node **1.0.10** | https://github.com/rgsneddon/gnfp-node |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
 
@@ -35,7 +35,7 @@ node src\node.js
 
 Or `pack\win\gnfp-node.cmd` / `./pack/unix/gnfp-node`.
 
-That starts a full equal book: local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). The CLI prints **watching seeds**, **sync** progress (`local/network`), then a **tip-height** line whenever the book advances. A miner that seals a block here prints **block found** plus the full sealed block.
+That starts **join** (the default): local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). Miners on this node are relayed into the live book — this process does not mint a second chain. The CLI prints **watching seeds**, **sync** progress (`local/network`), then a **tip-height** line whenever the book advances.
 
 ### Help topics
 
@@ -61,8 +61,8 @@ curl -sS http://127.0.0.1:8014/api/tip
 | | Host | What |
 |---|---|---|
 | Germany | `de.restoreprivacy.online:1474` | well-known peer (default) |
-| Singapore | `sg.restoreprivacy.online:1474` | equal book, same tip |
-| You | `:1474` stratum + `:8014` HTTP | your book |
+| Singapore | `sg.restoreprivacy.online:1474` | join peer, same tip |
+| You | `:1474` stratum + `:8014` HTTP | join (default) |
 
 Always pull **:1474**. Public `:8014` is often filtered.
 
@@ -116,6 +116,8 @@ Roles: `join` · `pool` · `solo`.
 --pull HOST:PORT    same as --peer (does not change the chain)
 --http-port N       local HTTP book (default 8014)
 --stratum-port N    local miners (default 1474)
+--join              join the live book (default; on from launch)
+--equal / --book    local minting book (operator only)
 --replica-only      HTTP only — no local stratum
 --data-dir PATH     book on disk (default ~/.gnfp-node)
 --poll-ms N         how often to pull the tip (default 4000)
@@ -134,11 +136,10 @@ The book is stored compressed (`tip.json` + append-only `blocks.jsonl.gz`) so a 
 
 | This node does | This node does not |
 |---|---|
-| Run a full local book of `gnfp-germany-book-v1` | Need Germany online forever |
-| Sync from any peer, then continue alone | Start a different chain |
-| Accept **GNFPHash** miners on this node | Accept leftover `gnfp-mine` / GPU / ASIC |
-| Seal found blocks; confirm after 72s | Let an operator rewrite a sealed height |
-| Reject a mutated / competing / shorter tip (409) | Dump the whole book every poll |
+| Join the live book from launch (`gnfp-germany-book-v1`) | Mint a second chain (unless `--equal`) |
+| Relay **GNFPHash** miners into the live book | Accept leftover `gnfp-mine` / GPU / ASIC |
+| Sync a local replica of the same tip | Need Germany online forever to keep the replica |
+| Reject a mutated / competing / shorter tip (409) | Let an operator rewrite a sealed height |
 
 ## Tests
 

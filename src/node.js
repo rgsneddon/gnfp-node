@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * gnfp-node — equal Chronoflux book. Any node can run alone.
+ * gnfp-node — join the live Chronoflux book from launch.
+ * --equal / --book opts into a local minting book.
  */
 import fs from 'fs';
 import path from 'path';
@@ -16,7 +17,7 @@ import {
   SEED_NODES,
 } from './cli_status.js';
 
-export const VERSION = '1.0.9';
+export const VERSION = '1.0.10';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = renderHelp('', VERSION);
@@ -49,6 +50,7 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
     listenHttp: Number(flag(argv, '--http-port', '8014')),
     listenStratum: Number(flag(argv, '--stratum-port', '1474')),
     replicaOnly: argv.includes('--replica-only'),
+    join: !argv.includes('--equal') && !argv.includes('--book') && !argv.includes('--replica-only'),
     dataDir: flag(argv, '--data-dir', env.GNFP_NODE_DATA || defaultDataDir(env)),
     pollMs: Number(flag(argv, '--poll-ms', env.GNFP_NODE_POLL_MS || '4000')),
     announceHost: flag(argv, '--announce-host', env.GNFP_ANNOUNCE_HOST || ''),
@@ -57,13 +59,13 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
       '--announce-url',
       env.GNFP_ANNOUNCE_URL || 'https://explorer.restoreprivacy.online/api/nodes',
     ),
-    role: flag(argv, '--role', 'book'),
+    role: flag(argv, '--role', 'join'),
     tlsCert: flag(argv, '--tls-cert', env.GNFP_TLS_CERT || ''),
     tlsKey: flag(argv, '--tls-key', env.GNFP_TLS_KEY || ''),
     tls,
     verifyBeforeAdopt: true,
-    equalNode: !argv.includes('--replica-only'),
-    emissionBook: !argv.includes('--replica-only'),
+    equalNode: argv.includes('--equal') || argv.includes('--book'),
+    emissionBook: argv.includes('--equal') || argv.includes('--book'),
   };
 }
 
@@ -82,6 +84,7 @@ export function main(argv = process.argv) {
       hub: `${cfg.hubHost}:${cfg.hubStratum}`,
       tls: cfg.tls,
       verifyBeforeAdopt: true,
+      join: cfg.join,
       equalNode: cfg.equalNode,
       emissionBook: cfg.emissionBook,
     })}\n`);
@@ -91,17 +94,18 @@ export function main(argv = process.argv) {
   const peer = `${cfg.pullHost}:${cfg.pullPort}`;
   holdProcessOpen(cfg.dataDir);
   console.log(
-    `gnfp-node ${VERSION} equal=${cfg.equalNode} peer=${peer} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
+    `gnfp-node ${VERSION} join=${cfg.join} equal=${cfg.equalNode} peer=${peer} http=${cfg.listenHttp} stratum=${cfg.replicaOnly ? 'off' : cfg.listenStratum}`,
   );
   printer.watchingSeeds(SEED_NODES);
   printer.syncStart({ peer, localHeight: 0, networkHeight: '?' });
   const live = { ...cfg, printer };
-  if (cfg.replicaOnly) {
+  if (cfg.replicaOnly || cfg.join) {
     startJoinNode({
       ...joinConfig(),
       ...live,
       hubHost: cfg.pullHost,
       hubStratum: cfg.pullPort,
+      replicaOnly: cfg.replicaOnly,
     });
   } else {
     startEqualNode(live);
