@@ -8,7 +8,7 @@ import { GNFP_BOOK } from './chronoflux_chain.js';
 import { hubBaseUrl } from './hub_http.js';
 import { defaultDataDir } from './node_store.js';
 
-export const VERSION = '1.0.5';
+export const VERSION = '1.0.6';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = `gnfp-node ${VERSION} — equal $GNFP Chronoflux node
@@ -39,6 +39,8 @@ Options:
   --announce-url URL  announce endpoint
   --role join|pool|solo
   --notls             local plaintext only
+  --tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
+  --tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
   --print-config      JSON (coin=GNFP, equalNode, TLS)
   --help
 `;

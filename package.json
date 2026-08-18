@@ -1,6 +1,6 @@
 {
   "name": "gnfp-node",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Equal Chronoflux gnfp-node: any node can run the book alone",
   "type": "module",
   "bin": {

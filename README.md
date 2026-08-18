@@ -1,128 +1,134 @@
 # gnfp-node
 
-Run **your own $GNFP node**. Every node is an **equal Chronoflux book** of the same chain. Germany is a well-known peer, not a required master. If that peer drops, this node keeps the tip, accepts miners, and continues the chain.
+Run **your own $GNFP node**. Same chain as everyone else. Germany and Singapore are **equal peers**, not masters. If a peer drops, this node keeps the tip, accepts miners, and continues the book.
 
-**Pin:** `1.0.5`  
+**Pin:** `1.0.6`  
 **Coin:** GNFP  
-**Chain id:** `gnfp-germany-book-v1` (immutable). Hosts are peers.  
-TLS default; `--notls` is local plaintext only.
+**Chain:** `gnfp-germany-book-v1` (immutable)  
+**Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
 
-- Explorer: https://explorer.restoreprivacy.online
-- Pool: https://gnfp.restoreprivacy.online
-- Miner: [GNFPHash 1.0.0](https://github.com/rgsneddon/GNFPHash)
-
-## What this is (and is not)
-
-| This node does | This node does not |
+| | |
 |---|---|
-| Run a full local book (HTTP + stratum) of chain `gnfp-germany-book-v1` | Require Germany to stay online |
-| Sync from any peer, then continue alone if the peer drops | Start a different genesis / 50-GNFP book |
-| Accept miners directly on this node | Relay-only to a master |
-| Hold found/confirmed blocks as sealed rows | Let an operator rewrite a sealed height |
-| Verify-before-adopt on peer updates | Dump the full ~30k-block book every poll |
+| Wallet **0.1.2** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.2 |
+| Miner **GNFPHash 1.0.1** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.1 |
+| Node **1.0.6** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.0.6 |
+| Pool | https://gnfp.restoreprivacy.online |
+| Explorer | https://explorer.restoreprivacy.online |
 
-`--replica-only` is pull-only. Default is an **equal book**.
+## How to run a node
 
-## Install
-
-Needs **Node.js 18+**.
+Needs **Node.js 18+**. No `npm install`.
 
 ```bash
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-# no npm dependencies
-```
-
-Windows pack: `pack\win\gnfp-node.cmd`  
-Unix pack: `./pack/unix/gnfp-node`
-
-GitHub Releases: https://github.com/rgsneddon/gnfp-node/releases
-
-## Run your own node
-
-Run a full equal node (local stratum + HTTP + persist):
-
-```bash
+git checkout v1.0.6
 node src/node.js
 ```
 
-TLS is on. Use `--notls` only against a local plaintext loopback. `--pull host:port` is a dial address for tests; it does not retarget the book.
+Windows:
 
-Useful flags:
-
-```text
---pull HOST:PORT    dial address only (default de.restoreprivacy.online:1474)
---http-port N       local HTTP replica / pull (default 8014)
---stratum-port N    local stratum relay (default 1474)
---replica-only      HTTP only — no local stratum
---data-dir PATH     persist adopted tip (default ~/.gnfp-node)
---poll-ms N         how often to pull the tip (default 4000)
---notls             local plaintext only
---tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
---tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
---print-config      JSON (coin=GNFP, hub, TLS)
---help
+```bat
+git clone https://github.com/rgsneddon/gnfp-node.git
+cd gnfp-node
+git checkout v1.0.6
+node src\node.js
 ```
 
-Example: replica-only observer that other software can query:
+Or `pack\win\gnfp-node.cmd` / `./pack/unix/gnfp-node`.
 
-```bash
-node src/node.js \
-  --replica-only \
-  --http-port 8014 \
-  --data-dir ~/.gnfp-node
-```
+That starts a full equal book: local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). Leave it running. First sync can take a few minutes.
 
-Public `:8014` on Germany is often filtered. **Always pull `:1474`**, not `https://de…/api/network` on 443/8014.
-
-Check the process:
+### Check it
 
 ```bash
 node src/node.js --print-config
 curl -sS http://127.0.0.1:8014/api/tip
 ```
 
-`/api/tip` should show the same `height` / `tipHash` as the book. `/api/blocks?afterHeight=N&afterHash=H&limit=64` is the incremental pull.
+`height` / `tipHash` should match the [explorer](https://explorer.restoreprivacy.online).
 
-## How sync works
+## Peers (same book)
 
-A found block is sealed into the hash-linked chain at once. After 72 seconds it is confirmed and stays held — it is not dropped, rewritten, or operator-editable.
-
-1. GET `https://de.restoreprivacy.online:1474/api/tip` (TLS; `--notls` uses http).
-2. If the local tip already matches `height` + `tipHash`, wait for the next poll.
-3. Else GET `/api/blocks?afterHeight=<local>&afterHash=<localTip>&limit=64`.
-4. Verify-before-adopt: only a hash-linked extension of the last adopted tip is taken.
-5. Persist under `--data-dir` (`tip.json` + append-only `blocks.jsonl`). Restart resumes that tip, not height 0.
-
-A mutated payload, a same-height competing tip, or a shorter/rollback book is rejected (`ok: false` / HTTP 409 on `POST /api/sync`).
-
-## Announce (optional)
-
-Exchanges or other pool operators can check in so explorer **Nodes online** lists them:
-
-```bash
-node src/node.js \
-  --announce-host mynode.example \
-  --role pool
-```
-
-Or:
-
-```bash
-curl -X POST https://explorer.restoreprivacy.online/api/nodes \
-  -H 'content-type: application/json' \
-  -d '{"host":"mynode.example","port":1474,"role":"join"}'
-```
-
-Roles: `join` (stratum relay), `pool` (you offer GNFP services), `solo`.
-
-## Ports
-
-| Port | Where | What |
+| | Host | What |
 |---|---|---|
-| **1474** | Germany (`de.restoreprivacy.online`) | Master book seed — stratum + HTTP mux (tip / incremental blocks). TLS in public. |
-| **1474** | your host (default) | Optional stratum relay into Germany. Not a second book. |
-| **8014** | your host (default) | Local HTTP replica + pull (`/api/tip`, `/api/headers`, `/api/blocks`). |
+| Germany | `de.restoreprivacy.online:1474` | well-known peer (default) |
+| Singapore | `sg.restoreprivacy.online:1474` | equal book, same tip |
+| You | `:1474` stratum + `:8014` HTTP | your book |
+
+Always pull **:1474**. Public `:8014` is often filtered.
+
+Sync from Singapore instead:
+
+```bash
+node src/node.js --peer sg.restoreprivacy.online:1474
+```
+
+## Point a miner at it
+
+Use **GNFPHash 1.0.1** and a real `gnfp1` address. Public peers stay TLS. Local stratum is TLS only if you pass a cert/key; otherwise add `--notls` on the miner.
+
+```bash
+git clone https://github.com/rgsneddon/GNFPHash.git
+cd GNFPHash
+git checkout v1.0.1
+node src/miner.js --pool de.restoreprivacy.online:1474 --user gnfp1YOURADDRESS.worker --threads 4
+```
+
+Local node (plaintext stratum):
+
+```bash
+node src/miner.js --pool 127.0.0.1:1474 --user gnfp1YOURADDRESS.worker --threads 4 --notls
+```
+
+Or let the [pool page](https://gnfp.restoreprivacy.online) write the line.
+
+## Optional
+
+Watch-only (HTTP, no local miners):
+
+```bash
+node src/node.js --replica-only
+```
+
+Show up on explorer **Nodes online**:
+
+```bash
+node src/node.js --announce-host mynode.example --role join
+```
+
+Roles: `join` · `pool` · `solo`.
+
+`--notls` is local plaintext only. Public books stay TLS.
+
+## Flags
+
+```text
+--peer HOST:PORT    peer to sync from (default de.restoreprivacy.online:1474)
+--pull HOST:PORT    same as --peer (does not change the chain)
+--http-port N       local HTTP book (default 8014)
+--stratum-port N    local miners (default 1474)
+--replica-only      HTTP only — no local stratum
+--data-dir PATH     book on disk (default ~/.gnfp-node)
+--poll-ms N         how often to pull the tip (default 4000)
+--announce-host H   register on the explorer
+--role join|pool|solo
+--notls             local plaintext only
+--tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
+--tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
+--print-config
+--help
+```
+
+## What this is (and is not)
+
+| This node does | This node does not |
+|---|---|
+| Run a full local book of `gnfp-germany-book-v1` | Need Germany online forever |
+| Sync from any peer, then continue alone | Start a different chain |
+| Accept **GNFPHash** miners on this node | Accept leftover `gnfp-mine` / GPU / ASIC |
+| Seal found blocks; confirm after 72s | Let an operator rewrite a sealed height |
+| Reject a mutated / competing / shorter tip (409) | Dump the whole book every poll |
 
 ## Tests
 
