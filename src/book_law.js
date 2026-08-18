@@ -2,6 +2,7 @@
  * Immutable book law. Every gnfp-node uses these rules.
  * Pool / explorer only report them — they do not invent a second difficulty.
  */
+import { createHash } from 'crypto';
 /** Legacy 1e-8 subunit (1 GNFP pot). Too coarse for the 1e-9 hash bonus. */
 export const UNITS_PER_GNFP = 100_000_000;
 export const NANOS_PER_GNFP = 1_000_000_000;
@@ -11,6 +12,8 @@ export const BLOCK_REWARD_NANOS = NANOS_PER_GNFP;
 /** 0.000000001 GNFP per in-window hash. Resets every formed block. */
 export const HASH_BONUS_NANOS = 1;
 export const HASH_BONUS_GNFP = HASH_BONUS_NANOS / NANOS_PER_GNFP;
+/** Public pool/explorer preview. Amounts honest; parties sheared. */
+export const PUBLIC_TX_PREVIEW = 10;
 /** @deprecated old 1e-8 per accepted share — do not use for new credits */
 export const SHARE_CREDIT_MICRO = 0;
 /** Target spacing for retarget. Not a mint clock. */
@@ -110,6 +113,43 @@ export function canFormBlock({ blockHashMet } = {}) {
 
 export function coinbaseAmountGnfp() {
   return BLOCK_REWARD_GNFP;
+}
+
+export function looksLikeSecretParty(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return false;
+  if (/^gnfp1[0-9a-z]+$/i.test(s)) return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(s)) return true;
+  if (/@/.test(s)) return true;
+  return false;
+}
+
+/** Public party tag. Never a wallet, IP, or login. */
+export function shearPublicParty(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (s === 'coinbase' || s === 'miners') return s;
+  if (/^shear-[0-9a-f]{8}$/i.test(s)) return s.toLowerCase();
+  const hex = createHash('sha256').update(`cfx-party:${s}`).digest('hex').slice(0, 8);
+  return `shear-${hex}`;
+}
+
+export function publicTxPreview(txs, limit = PUBLIC_TX_PREVIEW) {
+  const n = Math.max(0, Math.min(PUBLIC_TX_PREVIEW, Math.floor(Number(limit) || PUBLIC_TX_PREVIEW)));
+  const list = Array.isArray(txs) ? txs : [];
+  return list.slice(-n).reverse().map((t) => {
+    const from = shearPublicParty(t?.from);
+    const to = shearPublicParty(t?.to);
+    return {
+      id: String(t?.id || ''),
+      kind: String(t?.kind || ''),
+      asset: String(t?.asset || 'GNFP'),
+      from,
+      to,
+      amount: Number(t?.amount) || 0,
+      height: Number(t?.height) || undefined,
+    };
+  }).filter((row) => !looksLikeSecretParty(row.from) && !looksLikeSecretParty(row.to));
 }
 
 export function emptyHashWindow() {

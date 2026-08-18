@@ -253,7 +253,7 @@ export function createJoinHttpServer({
       }
       if (url === '/api/txs' || url === '/gnfp/api/txs') {
         const cached = getReplicaBook() || {};
-        const txs = Array.isArray(cached.txs) ? cached.txs.slice(0, 5) : [];
+        const txs = Array.isArray(cached.txs) ? cached.txs.slice(0, 10) : [];
         ok(200, { ok: true, coin: GNFP_TICKER, txs });
         return;
       }

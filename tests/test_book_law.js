@@ -7,6 +7,9 @@ import {
   HASH_BONUS_GNFP,
   HASH_BONUS_NANOS,
   NANOS_PER_GNFP,
+  PUBLIC_TX_PREVIEW,
+  looksLikeSecretParty,
+  publicTxPreview,
   TARGET_BLOCK_INTERVAL_MS,
   blockBitsFromHashrate,
   bookLawOnTip,
@@ -31,6 +34,22 @@ test('book law: time never mints; reward and dust are fixed', () => {
   assert.equal(HASH_BONUS_NANOS, 1);
   assert.equal(NANOS_PER_GNFP, 1_000_000_000);
   assert.equal(TARGET_BLOCK_INTERVAL_MS, 90_000);
+  assert.equal(PUBLIC_TX_PREVIEW, 10);
+});
+
+test('public tx preview shows amounts and never leaks wallets or IPs', () => {
+  const rows = publicTxPreview([
+    { id: 'a', kind: 'mine', from: 'coinbase', to: 'gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c', amount: 1.000000001 },
+    { id: 'b', kind: 'send', from: '127.0.0.1:1474', to: 'miners', amount: 0.5 },
+    { id: 'c', kind: 'mine', from: 'coinbase', to: 'miners', amount: 1 },
+  ], 10);
+  assert.ok(rows.length >= 1);
+  assert.equal(rows[0].amount, 1);
+  const blob = JSON.stringify(rows);
+  assert.equal(blob.includes('gnfp1'), false);
+  assert.equal(blob.includes('127.0.0.1'), false);
+  assert.equal(looksLikeSecretParty('gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c'), true);
+  assert.equal(looksLikeSecretParty('shear-ab12cd34'), false);
 });
 
 test('book law: per-hash bonus is 1e-9 GNFP and resets when a block forms', () => {
