@@ -2,18 +2,23 @@
 
 Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live book. Germany and Singapore are well-known peers, not masters.
 
-**Pin:** `1.1.8`  
+**Pin:** `1.1.9`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
 
+Only **miners** mint. A wallet send never creates GNFP. Time never forms a block.
+
+Each proven hash is credited into that miner’s **one open hash transaction** (not a new object per hash). Those rows stay unconfirmed until miner work forms a block; then they confirm as **one row per miner**. Wallet sends confirm on that same block.
+
 | | |
 |---|---|
-| Wallet **0.1.2** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.2 |
-| Miner **GNFPHash 1.0.1** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.1 |
-| Node **1.1.8** | https://github.com/rgsneddon/gnfp-node |
+| Wallet **0.1.4** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.4 |
+| Miner **GNFPHash 1.0.2** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.2 |
+| Node **1.1.9** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.1.9 |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
+| Mac handoff (all pins) | [HANDOFF_APPLE_GNFP.md](./HANDOFF_APPLE_GNFP.md) |
 
 ## How to run a node
 
@@ -74,12 +79,12 @@ node src/node.js --peer sg.restoreprivacy.online:1474
 
 ## Point a miner at it
 
-Use **GNFPHash 1.0.1** and a real `gnfp1` address. Public peers stay TLS. Local stratum is TLS only if you pass a cert/key; otherwise add `--notls` on the miner.
+Use **GNFPHash 1.0.2** and a real `gnfp1` address. Public peers stay TLS. Local stratum is TLS only if you pass a cert/key; otherwise add `--notls` on the miner.
 
 ```bash
 git clone https://github.com/rgsneddon/GNFPHash.git
 cd GNFPHash
-git checkout v1.0.1
+git checkout v1.0.2
 node src/miner.js --pool de.restoreprivacy.online:1474 --user gnfp1YOURADDRESS.worker --threads 4
 ```
 
@@ -120,7 +125,7 @@ Roles: `join` · `pool` · `solo`.
 --equal / --book    local minting book (operator only)
 --replica-only      HTTP only — no local stratum
 --data-dir PATH     book on disk (default ~/.gnfp-node)
---poll-ms N         how often to pull the tip (default 4000)
+--poll-ms N         how often to pull the tip (default 1000)
 --announce-host H   register on the explorer
 --role join|pool|solo
 --notls             local plaintext only

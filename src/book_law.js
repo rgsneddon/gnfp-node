@@ -241,9 +241,10 @@ export function hashCommitBonusNanos(hashes) {
 }
 
 /**
- * Each accepted share is a real hash transaction (bonus nanos).
- * Unconfirmed until block found. The formed block bundles them
- * (one confirmed row per miner, same total nanos) in one step.
+ * Each proven hash is credited into that miner's open hash transaction
+ * (bonus nanos). One open row per miner — not one object per hash.
+ * Unconfirmed until miner work forms a block, then one confirmed row
+ * per miner (same total nanos). Lean on purpose.
  */
 export function hashCommitTx({
   to,

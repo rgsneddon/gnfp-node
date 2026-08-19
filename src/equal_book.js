@@ -118,7 +118,6 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   const minerCpu = new Map();
   let hashWindow = emptyHashWindow();
   const hashMarks = new Map();
-  const pendingHashTxs = [];
   const minerNanos = Object.create(null);
   let lastFormedAt = 0;
   let lastBlockBits = GENESIS_DIFFICULTY_BITS;
@@ -244,7 +243,6 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       height,
       jobId: current.jobId,
     });
-    pendingHashTxs.push(hashTx);
     creditMiner(miner, hashTx.nanos);
     const workHash = gnfpWorkHash(current.input || current.preWork, nonce, '');
     const needBits = formBits();
@@ -268,7 +266,14 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       0,
     );
     const nextHeight = height + 1;
-    const hashTxs = bundleHashTxsForBlock(pendingHashTxs.splice(0, pendingHashTxs.length), nextHeight);
+    const hashTxs = bundleHashTxsForBlock(
+      Object.entries(settled.bonusNanos || {}).map(([to, nanos]) => ({
+        to,
+        hashes: nanos,
+        nanos,
+      })),
+      nextHeight,
+    );
     const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const sealed = sealBlock(
       {
