@@ -8,18 +8,23 @@ import net from 'net';
 import tls from 'tls';
 import { GNFP_BOOK, extractChain, heightOf, sealBlock, tipHashOf } from './chronoflux_chain.js';
 import { applyIncremental, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
-import { hashMeetsJob } from './cpu_pow.js';
 import {
   BLOCK_REWARD_GNFP,
-  blockBitsFromHashrate,
   bookLawOnTip,
   canFormBlock,
   emptyHashWindow,
   noteMinerHashes,
   settleWindowCredits,
+  hashesProvenByShare,
+  SHARE_DIFFICULTY_BITS,
+  LIVE_MIN_DIFFICULTY_BITS,
+  GENESIS_DIFFICULTY_BITS,
+  TARGET_BLOCK_INTERVAL_MS,
+  retargetBits,
   HASH_BONUS_GNFP,
   NANOS_PER_GNFP,
 } from './book_law.js';
+import { hashMeetsJob, gnfpWorkHash, meetsTarget } from './cpu_pow.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
@@ -108,6 +113,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   const miners = new Set();
   let hashWindow = emptyHashWindow();
   const hashMarks = new Map();
+  let lastFormedAt = 0;
+  let lastBlockBits = GENESIS_DIFFICULTY_BITS;
 
   function liveHashrate() {
     const dt = Math.max(1, (Date.now() - hashWindowStart) / 1000);
@@ -122,11 +129,23 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     }
   }
 
-  function currentBits() {
+  function shareJobBits() {
+    return SHARE_DIFFICULTY_BITS;
+  }
+
+  function formBits() {
     const forced = Number(bits);
-    if (Number.isFinite(forced) && forced > 0) return Math.floor(forced);
-    const last = blocks.length ? blocks[blocks.length - 1] : null;
-    return blockBitsFromHashrate(liveHashrate()) || Number(last?.difficulty) || 8;
+    if (Number.isFinite(forced) && forced > 0) {
+      return Math.max(LIVE_MIN_DIFFICULTY_BITS, Math.floor(forced));
+    }
+    const interval = lastFormedAt > 0 ? Date.now() - lastFormedAt : 0;
+    return retargetBits(liveHashrate(), lastBlockBits, TARGET_BLOCK_INTERVAL_MS, {
+      lastBlockIntervalMs: interval || undefined,
+    });
+  }
+
+  function currentBits() {
+    return formBits();
   }
 
   function tip() {
@@ -158,12 +177,13 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
 
   function nextJob() {
     const h = height || 0;
-    const jobBits = currentBits();
+    const jobBits = shareJobBits();
     job = {
       jobId: `gnfp-${h}-${jobSeq++}`,
       id: `gnfp-${h}-${jobSeq}`,
       height: h,
       difficulty: jobBits,
+      blockDifficulty: formBits(),
       input: `gnfp-equal-${h}-${jobSeq}`,
       preWork: `gnfp-equal-${h}-${jobSeq}`,
       algorithm: 'GNFPHash',
@@ -184,10 +204,14 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     }
     noteHash();
     const miner = String(username || 'anon');
-    hashWindow = noteMinerHashes(hashWindow, miner, 1);
-    const jobBits = Math.max(1, Math.floor(Number(current.difficulty) || currentBits()));
-    if (!canFormBlock({ blockHashMet: hashMeetsJob(current, nonce, '') })) {
-      return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
+    const shareBits = Math.max(SHARE_DIFFICULTY_BITS, Math.floor(Number(current.difficulty) || SHARE_DIFFICULTY_BITS));
+    hashWindow = noteMinerHashes(hashWindow, miner, hashesProvenByShare(shareBits));
+    acceptedCount += 1;
+    const workHash = gnfpWorkHash(current.input || current.preWork, nonce, '');
+    const needBits = formBits();
+    const blockHashMet = meetsTarget(workHash, needBits);
+    if (!canFormBlock({ blockHashMet })) {
+      return { accepted: true, asset: GNFP_BOOK.coin, block: { formed: false } };
     }
     const settled = settleWindowCredits(hashWindow);
     hashWindow = settled.nextWindow;
@@ -208,7 +232,7 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         hashBonusGnfp: HASH_BONUS_GNFP,
         creditsNanos: settled.totalsNanos,
         bonusNanos: settled.bonusNanos,
-        difficulty: jobBits,
+        difficulty: needBits,
         foundAt: Date.now(),
         from: 'coinbase',
         to: 'miners',
@@ -218,9 +242,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     );
     blocks.push(sealed);
     height = nextHeight;
+    lastBlockBits = needBits;
+    lastFormedAt = Date.now();
     nextJob();
     persist();
-    acceptedCount += 1;
     for (const hook of shareHooks) {
       try { hook(sealed); } catch { /* announce is best-effort */ }
     }
@@ -377,15 +402,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             });
             if (got.accepted) send({ method: 'job', ... (job || nextJob()) });
           } else if (method === 'stats') {
-            const who = String(msg.login || msg.user || '');
-            const hashes = Number(msg.hashes);
-            if (who && Number.isFinite(hashes) && hashes >= 0) {
-              const prev = hashMarks.get(who);
-              if (prev != null && hashes >= prev) {
-                hashWindow = noteMinerHashes(hashWindow, who, hashes - prev);
-              }
-              hashMarks.set(who, hashes);
-            }
+            ingestStats({
+              username: msg.login || msg.user,
+              hashes: msg.hashes,
+            });
             send({ result: true, coin: GNFP_BOOK.coin });
           }
         }
@@ -405,12 +425,25 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     };
   }
 
+  function ingestStats({ username, hashes } = {}) {
+    const who = String(username || '');
+    const n = Number(hashes);
+    if (who && Number.isFinite(n) && n >= 0) hashMarks.set(who, n);
+    return { ok: true, window: { ...hashWindow } };
+  }
+
+  function hashWindowSnapshot() {
+    return { ...hashWindow };
+  }
+
   if (!job) nextJob();
 
   return {
     tip,
     nextJob,
     submitShare,
+    ingestStats,
+    hashWindowSnapshot,
     adoptRemote,
     handleApi,
     listenHttp,

@@ -7,7 +7,13 @@ import {
   HASH_BONUS_GNFP,
   HASH_BONUS_NANOS,
   NANOS_PER_GNFP,
+  POOL_FEE_BPS,
+  POOL_FEE_PAYOUT,
   PUBLIC_TX_PREVIEW,
+  poolFeeNanos,
+  poolFeePayout,
+  sealedCoinbaseGnfp,
+  sealedCoinbaseNanos,
   looksLikeSecretParty,
   publicTxPreview,
   TARGET_BLOCK_INTERVAL_MS,
@@ -18,6 +24,9 @@ import {
   hashBonusGnfp,
   hashBonusNanos,
   hashesThisRoundOf,
+  hashesProvenByShare,
+  bookLawFingerprint,
+  BOOK_LAW_ID,
   networkDifficulty,
   noteMinerHashes,
   retargetBits,
@@ -35,21 +44,47 @@ test('book law: time never mints; reward and dust are fixed', () => {
   assert.equal(NANOS_PER_GNFP, 1_000_000_000);
   assert.equal(TARGET_BLOCK_INTERVAL_MS, 90_000);
   assert.equal(PUBLIC_TX_PREVIEW, 10);
+  assert.equal(POOL_FEE_BPS, 100);
+  assert.equal(POOL_FEE_PAYOUT, 'gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c');
+  assert.equal(poolFeePayout(), POOL_FEE_PAYOUT);
+  assert.equal(poolFeeNanos(), 10_000_000);
+});
+
+test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
+  assert.equal(sealedCoinbaseNanos({}), BLOCK_REWARD_NANOS);
+  assert.equal(sealedCoinbaseGnfp({}), 1);
+  assert.equal(sealedCoinbaseNanos({ a: 1, b: 3 }), BLOCK_REWARD_NANOS + 4);
+  assert.equal(sealedCoinbaseGnfp({ a: 1, b: 3 }), 1 + 4 / NANOS_PER_GNFP);
+  assert.equal(hashesProvenByShare(14), 16384);
+  assert.equal(retargetBits(0, 31, 90_000, {}), 31);
+  assert.equal(BOOK_LAW_ID, 'gnfp-book-law-1');
+  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10');
+  const tip = bookLawOnTip();
+  assert.equal(tip.bookLawFingerprint, bookLawFingerprint());
+  assert.equal(tip.liveMinDifficultyBits, 14);
+  assert.equal(tip.genesisDifficultyBits, 21);
+  assert.equal(tip.blockIntervalMs, 90_000);
+  assert.equal(tip.hashBonusGnfp, 1e-9);
 });
 
 test('public tx preview shows amounts and never leaks wallets or IPs', () => {
   const rows = publicTxPreview([
     { id: 'a', kind: 'mine', from: 'coinbase', to: 'gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c', amount: 1.000000001 },
     { id: 'b', kind: 'send', from: '127.0.0.1:1474', to: 'miners', amount: 0.5 },
-    { id: 'c', kind: 'mine', from: 'coinbase', to: 'miners', amount: 1 },
+    { id: 'c', kind: 'mine', from: 'coinbase:de.restoreprivacy.online:1474', to: 'miners', amount: 1 },
   ], 10);
   assert.ok(rows.length >= 1);
+  assert.equal(rows[0].from, 'coinbase');
+  assert.equal(rows[0].to, 'miners');
   assert.equal(rows[0].amount, 1);
   const blob = JSON.stringify(rows);
   assert.equal(blob.includes('gnfp1'), false);
   assert.equal(blob.includes('127.0.0.1'), false);
   assert.equal(looksLikeSecretParty('gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c'), true);
+  assert.equal(looksLikeSecretParty('127.0.0.1:1474'), true);
   assert.equal(looksLikeSecretParty('shear-ab12cd34'), false);
+  assert.equal(looksLikeSecretParty('miner-86cf36fa'), false);
+  assert.equal(looksLikeSecretParty('coinbase'), false);
 });
 
 test('book law: per-hash bonus is 1e-9 GNFP and resets when a block forms', () => {

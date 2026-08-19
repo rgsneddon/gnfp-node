@@ -16,12 +16,17 @@ export const HASH_BONUS_GNFP = HASH_BONUS_NANOS / NANOS_PER_GNFP;
 export const PUBLIC_TX_PREVIEW = 10;
 /** @deprecated old 1e-8 per accepted share — do not use for new credits */
 export const SHARE_CREDIT_MICRO = 0;
+/** 1% of the 1 GNFP pot. Book law — pool scripts must not invent another dest. */
+export const POOL_FEE_BPS = 100;
+export const POOL_FEE_PAYOUT = 'gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c';
 /** Target spacing for retarget. Not a mint clock. */
 export const TARGET_BLOCK_INTERVAL_MS = 90_000;
 export const MIN_DIFFICULTY_BITS = 1;
 export const MAX_DIFFICULTY_BITS = 32;
 /** Live floor: 2^14 hashes ≈ 90s at ~182 H/s. Never collapse to 1/8-bit on restart. */
 export const LIVE_MIN_DIFFICULTY_BITS = 14;
+/** Share target sent to miners. Block form uses retarget bits, not this. */
+export const SHARE_DIFFICULTY_BITS = LIVE_MIN_DIFFICULTY_BITS;
 /** Unknown hashrate (restart) aims ~90s at a few hundred H/s. */
 export const GENESIS_DIFFICULTY_BITS = 21;
 
@@ -74,7 +79,34 @@ export function retargetBits(
       Math.min(MAX_DIFFICULTY_BITS, prev + delta),
     );
   }
+  if (prevRaw >= LIVE_MIN_DIFFICULTY_BITS) return prev;
   return Math.max(LIVE_MIN_DIFFICULTY_BITS, blockBitsFromHashrate(hashrate, target));
+}
+
+/** Work proven by one accepted share at those bits. Bonus is per hash, not per share. */
+export function hashesProvenByShare(bits = SHARE_DIFFICULTY_BITS) {
+  const b = Math.max(
+    LIVE_MIN_DIFFICULTY_BITS,
+    Math.min(MAX_DIFFICULTY_BITS, Math.floor(Number(bits) || SHARE_DIFFICULTY_BITS)),
+  );
+  return 2 ** b;
+}
+
+/** Frozen consensus identity. A different fingerprint is a different law. */
+export const BOOK_LAW_ID = 'gnfp-book-law-1';
+export function bookLawFingerprint() {
+  return [
+    BOOK_LAW_ID,
+    TARGET_BLOCK_INTERVAL_MS,
+    LIVE_MIN_DIFFICULTY_BITS,
+    GENESIS_DIFFICULTY_BITS,
+    SHARE_DIFFICULTY_BITS,
+    HASH_BONUS_NANOS,
+    BLOCK_REWARD_GNFP,
+    POOL_FEE_BPS,
+    hashesProvenByShare(SHARE_DIFFICULTY_BITS),
+    PUBLIC_TX_PREVIEW,
+  ].join(':');
 }
 
 /**
@@ -128,7 +160,8 @@ export function looksLikeSecretParty(raw) {
 export function shearPublicParty(raw) {
   const s = String(raw || '').trim();
   if (!s) return '';
-  if (s === 'coinbase' || s === 'miners') return s;
+  if (s === 'coinbase' || s.startsWith('coinbase:') || s.startsWith('coinbase')) return 'coinbase';
+  if (s === 'miners' || s.startsWith('miners:')) return 'miners';
   if (/^shear-[0-9a-f]{8}$/i.test(s)) return s.toLowerCase();
   const hex = createHash('sha256').update(`cfx-party:${s}`).digest('hex').slice(0, 8);
   return `shear-${hex}`;
@@ -176,6 +209,31 @@ export function hashBonusNanos(hashes) {
 
 export function hashBonusGnfp(hashes) {
   return hashBonusNanos(hashes) / NANOS_PER_GNFP;
+}
+
+export function poolFeePayout() {
+  return POOL_FEE_PAYOUT;
+}
+
+export function poolFeeNanos(potNanos = BLOCK_REWARD_NANOS) {
+  const pot = Math.max(0, Math.floor(Number(potNanos) || 0));
+  return Math.floor((pot * POOL_FEE_BPS) / 10_000);
+}
+
+function hashTotalOf(hashCounts) {
+  return Object.values(hashCounts || {}).reduce(
+    (s, n) => s + Math.max(0, Math.floor(Number(n) || 0)),
+    0,
+  );
+}
+
+/** Sealed coinbase is always 1 GNFP + 1e-9 GNFP per in-window hash. */
+export function sealedCoinbaseNanos(hashCounts) {
+  return BLOCK_REWARD_NANOS + hashBonusNanos(hashTotalOf(hashCounts));
+}
+
+export function sealedCoinbaseGnfp(hashCounts) {
+  return sealedCoinbaseNanos(hashCounts) / NANOS_PER_GNFP;
 }
 
 function splitPotByHashes(hashCounts, potNanos) {
@@ -241,8 +299,15 @@ export function bookLawOnTip({
     blockRewardGnfp: BLOCK_REWARD_GNFP,
     hashBonusGnfp: HASH_BONUS_GNFP,
     hashBonusNanos: HASH_BONUS_NANOS,
+    poolFeeBps: POOL_FEE_BPS,
+    poolFeePayout: POOL_FEE_PAYOUT,
     nanosPerGnfp: NANOS_PER_GNFP,
     shareCreditMicro: SHARE_CREDIT_MICRO,
     unitsPerGnfp: UNITS_PER_GNFP,
+    liveMinDifficultyBits: LIVE_MIN_DIFFICULTY_BITS,
+    genesisDifficultyBits: GENESIS_DIFFICULTY_BITS,
+    shareDifficultyBits: SHARE_DIFFICULTY_BITS,
+    bookLawId: BOOK_LAW_ID,
+    bookLawFingerprint: bookLawFingerprint(),
   };
 }

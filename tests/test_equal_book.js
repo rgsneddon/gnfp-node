@@ -6,12 +6,11 @@ import net from 'net';
 import { GNFP_BOOK, hashMatches } from '../src/chronoflux_chain.js';
 import { hashMeetsJob } from '../src/cpu_pow.js';
 import { createEqualBook } from '../src/equal_book.js';
-import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, hashBonusGnfp } from '../src/book_law.js';
+import os from 'os';
+import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, hashBonusGnfp, hashesProvenByShare } from '../src/book_law.js';
 
 function scratchDir() {
-  const root = process.env.GROK_GOAL_SCRATCH
-    || 'C:\\Users\\rgsne\\AppData\\Local\\Temp\\grok-goal-4dfbfbe23840\\implementer';
-  const dir = path.join(root, `equal-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const dir = path.join(os.tmpdir(), `equal-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -26,7 +25,7 @@ function findNonce(job) {
 
 test('lone node settles a miner share and keeps the tip after restart', () => {
   const dir = scratchDir();
-  const a = createEqualBook({ dataDir: dir, bits: 1 });
+  const a = createEqualBook({ dataDir: dir, bits: 14 });
   assert.equal(a.tip().book, GNFP_BOOK.id);
   assert.equal(a.tip().emissionBook, true);
   const job = a.nextJob();
@@ -40,11 +39,15 @@ test('lone node settles a miner share and keeps the tip after restart', () => {
   assert.equal(got.accepted, true, got.reason);
   assert.equal(got.sealed.blockRewardGnfp, BLOCK_REWARD_GNFP);
   assert.equal(got.sealed.hashBonusGnfp, HASH_BONUS_GNFP);
-  assert.equal(got.sealed.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(1));
-  assert.equal(got.sealed.bonusNanos['gnfp1alice.worker'] ?? got.sealed.bonusNanos.gnfp1alice, 1);
+  const proven = hashesProvenByShare(14);
+  assert.equal(got.sealed.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(proven));
+  assert.equal(
+    got.sealed.bonusNanos['gnfp1alice.worker'] ?? got.sealed.bonusNanos.gnfp1alice,
+    proven,
+  );
   assert.equal(hashMatches(got.sealed), true);
   const hash = a.tip().tipHash;
-  const b = createEqualBook({ dataDir: dir, bits: 1 });
+  const b = createEqualBook({ dataDir: dir, bits: 14 });
   assert.equal(b.tip().height, 1);
   assert.equal(b.tip().tipHash, hash);
   assert.notEqual(b.tip().height, 0);
@@ -58,7 +61,7 @@ test('busy port bind does not throw an uncaught exception', async () => {
   const onUnc = (err) => { uncaught.push(err); };
   process.on('uncaughtException', onUnc);
   try {
-    const book = createEqualBook({ bits: 1 });
+    const book = createEqualBook({ bits: 14 });
     const http = book.listenHttp(port);
     http.listen(() => {});
     await new Promise((r) => setTimeout(r, 200));
@@ -71,7 +74,7 @@ test('busy port bind does not throw an uncaught exception', async () => {
 
 test('when the peer is gone the lone book still accepts miners', async () => {
   const dir = scratchDir();
-  const book = createEqualBook({ dataDir: dir, bits: 1 });
+  const book = createEqualBook({ dataDir: dir, bits: 14 });
   const http = book.listenHttp(0);
   const stratum = book.listenStratum(0);
   await new Promise((r) => http.listen(r));
@@ -115,4 +118,48 @@ test('when the peer is gone the lone book still accepts miners', async () => {
   await http.close();
   assert.equal(book.tip().height >= 1, true);
   assert.equal(book.tip().book, GNFP_BOOK.id);
+});
+
+test('equal-book credits hashesProvenByShare, not 1, and stats cannot enlarge the window', () => {
+  const book = createEqualBook({ bits: 32 });
+  const job = book.nextJob();
+  assert.equal(job.difficulty, 14);
+  assert.equal(job.blockDifficulty, 32);
+  const nonce = findNonce(job);
+  const got = book.submitShare({
+    username: 'gnfp1alice.worker',
+    nonce,
+    jobId: job.jobId,
+    client: 'GNFPHash',
+  });
+  assert.equal(got.accepted, true, got.reason);
+  assert.equal(got.sealed, undefined);
+  assert.equal(got.block?.formed, false);
+  const proven = hashesProvenByShare(14);
+  const before = book.hashWindowSnapshot();
+  const n = Object.values(before).reduce((s, v) => s + Math.max(0, Math.floor(Number(v) || 0)), 0);
+  assert.equal(n, proven);
+  assert.notEqual(n, 1);
+  book.ingestStats({ username: 'gnfp1alice.worker', hashes: 999_999_999 });
+  book.ingestStats({ username: 'gnfp1alice.worker', hashes: 2_000_000_000 });
+  const after = book.hashWindowSnapshot();
+  assert.deepEqual(after, before);
+});
+
+test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
+  const dir = scratchDir();
+  const book = createEqualBook({ dataDir: dir, bits: 14 });
+  const job = book.nextJob();
+  const nonce = findNonce(job);
+  const got = book.submitShare({
+    username: 'gnfp1carol.worker',
+    nonce,
+    jobId: job.jobId,
+    client: 'GNFPHash',
+  });
+  assert.equal(got.accepted, true, got.reason);
+  assert.equal(got.block.formed, true);
+  const proven = hashesProvenByShare(14);
+  assert.equal(got.sealed.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(proven));
+  assert.equal(got.sealed.amount, 1 + proven / 1e9);
 });
