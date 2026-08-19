@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * gnfp-node — join the live Chronoflux book from launch.
- * --equal / --book opts into a local minting book.
+ * gnfp-node — join the live Chronoflux node from launch.
+ * --equal / --book opts into a local minting node.
  */
 import fs from 'fs';
 import path from 'path';
@@ -18,7 +18,7 @@ import {
   SEED_NODES,
 } from './cli_status.js';
 
-export const VERSION = '1.1.9';
+export const VERSION = '1.2.1';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = renderHelp('', VERSION);

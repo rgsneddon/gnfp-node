@@ -1,21 +1,21 @@
 # gnfp-node
 
-Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live book. Germany and Singapore are well-known peers, not masters.
+Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live node. Germany and Singapore are well-known peers, not masters.
 
-**Pin:** `1.1.9`  
+**Pin:** `1.2.1`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
 
 Only **miners** mint. A wallet send never creates GNFP. Time never forms a block.
 
-Each proven hash is credited into that miner’s **one open hash transaction** (not a new object per hash). Those rows stay unconfirmed until miner work forms a block; then they confirm as **one row per miner**. Wallet sends confirm on that same block.
+Proven hashes accumulate on **one in-memory path per recipient wallet**. They are not public outputs and do not stream in the explorer. A block found commits **one hash-path tx per recipient** plus the 1 GNFP pot share. Wallet sends confirm on that same block.
 
 | | |
 |---|---|
 | Wallet **0.1.4** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.4 |
 | Miner **GNFPHash 1.0.2** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.2 |
-| Node **1.1.9** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.1.9 |
+| Node **1.2.1** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.1 |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
 | Mac handoff (all pins) | [HANDOFF_APPLE_GNFP.md](./HANDOFF_APPLE_GNFP.md) |
@@ -40,7 +40,7 @@ node src\node.js
 
 Or `pack\win\gnfp-node.cmd` / `./pack/unix/gnfp-node`.
 
-That starts **join** (the default): local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). Miners on this node are relayed into the live book — this process does not mint a second chain. The CLI prints **watching seeds**, **sync** progress (`local/network`), then a **tip-height** line whenever the book advances.
+That starts **join** (the default): local stratum **:1474**, HTTP **:8014**, data in `~/.gnfp-node` (Windows: `%USERPROFILE%\.gnfp-node`). Miners on this node are relayed into the live node — this process does not mint a second chain. The CLI prints **watching seeds**, **sync** progress (`local/network`), then a **tip-height** line whenever the node advances.
 
 ### Help topics
 
@@ -61,7 +61,7 @@ curl -sS http://127.0.0.1:8014/api/tip
 
 `height` / `tipHash` should match the [explorer](https://explorer.restoreprivacy.online).
 
-## Peers (same book)
+## Peers (same node)
 
 | | Host | What |
 |---|---|---|
@@ -112,19 +112,19 @@ node src/node.js --announce-host mynode.example --role join
 
 Roles: `join` · `pool` · `solo`.
 
-`--notls` is local plaintext only. Public books stay TLS.
+`--notls` is local plaintext only. Public nodes stay TLS.
 
 ## Flags
 
 ```text
 --peer HOST:PORT    peer to sync from (default de.restoreprivacy.online:1474)
 --pull HOST:PORT    same as --peer (does not change the chain)
---http-port N       local HTTP book (default 8014)
+--http-port N       local HTTP node (default 8014)
 --stratum-port N    local miners (default 1474)
---join              join the live book (default; on from launch)
---equal / --book    local minting book (operator only)
+--join              join the live node (default; on from launch)
+--equal / --book    local minting node (operator only)
 --replica-only      HTTP only — no local stratum
---data-dir PATH     book on disk (default ~/.gnfp-node)
+--data-dir PATH     node on disk (default ~/.gnfp-node)
 --poll-ms N         how often to pull the tip (default 1000)
 --announce-host H   register on the explorer
 --role join|pool|solo
@@ -135,14 +135,14 @@ Roles: `join` · `pool` · `solo`.
 --help [topic]      overview, or run / sync / mine / data
 ```
 
-The book is stored compressed (`tip.json` + append-only `blocks.jsonl.gz`) so a long chain is not rewritten every poll.
+The node is stored compressed (`tip.json` + append-only `blocks.jsonl.gz`) so a long chain is not rewritten every poll.
 
 ## What this is (and is not)
 
 | This node does | This node does not |
 |---|---|
-| Join the live book from launch (`gnfp-germany-book-v1`) | Mint a second chain (unless `--equal`) |
-| Relay **GNFPHash** miners into the live book | Accept leftover `gnfp-mine` / GPU / ASIC |
+| Join the live node from launch (`gnfp-germany-book-v1`) | Mint a second chain (unless `--equal`) |
+| Relay **GNFPHash** miners into the live node | Accept leftover `gnfp-mine` / GPU / ASIC |
 | Sync a local replica of the same tip | Need Germany online forever to keep the replica |
 | Reject a mutated / competing / shorter tip (409) | Let an operator rewrite a sealed height |
 

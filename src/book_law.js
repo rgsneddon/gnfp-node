@@ -94,7 +94,7 @@ export function hashesProvenByShare(bits = SHARE_DIFFICULTY_BITS) {
 
 /** Frozen consensus identity. A different fingerprint is a different law. */
 export const BOOK_LAW_ID = 'gnfp-book-law-1';
-/** Bonus credits on each accepted hash commit. Pot share confirms on block found. Not a flag. Not env. */
+/** Hash bonus accumulates on that recipient's path on accept. Wallet output commits at block found. Not a flag. Not env. */
 export const HASH_COMMIT_ON_ACCEPT = 1;
 /** One open-window hash row per miner. Not a flag. Not env. */
 export const HASH_TX_COLLATE = 1;
@@ -241,10 +241,9 @@ export function hashCommitBonusNanos(hashes) {
 }
 
 /**
- * Each proven hash is credited into that miner's open hash transaction
- * (bonus nanos). One open row per miner — not one object per hash.
- * Unconfirmed until miner work forms a block, then one confirmed row
- * per miner (same total nanos). Lean on purpose.
+ * In-memory recipient path: add proven hashes onto one row per wallet.
+ * Not a public output and not a wallet row. Block found confirms one
+ * hash-path tx per recipient (same total nanos).
  */
 export function hashCommitTx({
   to,

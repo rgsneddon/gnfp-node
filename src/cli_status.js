@@ -80,28 +80,28 @@ Every node syncs the same chain (${GNFP_BOOK.id}).
 Germany (${GNFP_BOOK.stratum}) is a well-known peer, not a required master.
 
 Default is join from launch: local stratum + HTTP that relay miners into
-the live book. Shares accepted here are the same shares the hub accepts.
+the live node. Shares accepted here are the same shares the hub accepts.
 --replica-only is pull-only (no local stratum).
---equal / --book starts a local minting book (operator only; can fork).
+--equal / --book starts a local minting node (operator only; can fork).
 
 TLS is the shipped default. --notls is local plaintext only.
-Verify-before-adopt still rejects mutated / same-height / rollback books.
+Verify-before-adopt still rejects mutated / same-height / rollback nodes.
 
 Help topics (use: gnfp-node help <topic>):
   run     start the node and read live CLI output
   sync    synchronise to the network and watch seed nodes
   mine    point GNFPHash at this node
-  data    where the book lives on disk (data location)
+  data    where the node lives on disk (data location)
 
 Options:
   --peer HOST:PORT    optional peer to sync from (default ${GNFP_BOOK.stratum})
   --pull HOST:PORT    same as --peer (dial only; does not change chain id)
-  --http-port N       local HTTP book (default 8014)
-  --stratum-port N    local miner stratum / book (default 1474)
-  --join              join the live book (default; on from launch)
-  --equal / --book    local minting book (not the default)
+  --http-port N       local HTTP node (default 8014)
+  --stratum-port N    local miner stratum / node (default 1474)
+  --join              join the live node (default; on from launch)
+  --equal / --book    local minting node (not the default)
   --replica-only      sync/serve only — do not settle locally
-  --data-dir PATH     persist the book (default ~/.gnfp-node)
+  --data-dir PATH     persist the node (default ~/.gnfp-node)
   --poll-ms N         how often to pull the tip (default 4000)
   --announce-host H   public host to register
   --announce-url URL  announce endpoint
@@ -119,7 +119,7 @@ export function helpTopicPage(topic, version = '') {
   if (t === 'run') {
     return `gnfp-node help run${version ? ` (${version})` : ''}
 
-Start a join node (local stratum :1474 + HTTP :8014, live book):
+Start a join node (local stratum :1474 + HTTP :8014, live node):
 
   gnfp-node
   gnfp-node --notls --data-dir .\\my-book
@@ -134,16 +134,16 @@ The CLI prints ongoing output:
   2. sync start — local height vs network tip-height
   3. sync LOCAL/NETWORK (PCT%) — progress while catching up
   4. tip-height N hash=… — one new line each time the tip advances
-  5. miners on this node are relayed to the live book (join)
+  5. miners on this node are relayed to the live node (join)
 
-Leave it running. First sync can take a minute on a tall book; later
+Leave it running. First sync can take a minute on a tall node; later
 restarts resume from the on-disk tip (see: gnfp-node help data).
 
 Replica-only (HTTP, no local miners):
 
   gnfp-node --replica-only --http-port 8014
 
-Local minting book (operator only — can fork the tip):
+Local minting node (operator only — can fork the tip):
 
   gnfp-node --equal
 `;
@@ -152,14 +152,14 @@ Local minting book (operator only — can fork the tip):
     return `gnfp-node help sync${version ? ` (${version})` : ''}
 
 On start the node watches seed nodes and synchronises to the same
-immutable book (${GNFP_BOOK.id}).
+immutable node (${GNFP_BOOK.id}).
 
 Seeds (same chain, not masters):
   germany   ${GNFP_BOOK.stratum}
   singapore sg.restoreprivacy.online:1474
 
 Pull from a seed (or any peer) with batched incremental blocks. The node
-does not rewrite sealed history. A mutated / same-height / shorter book
+does not rewrite sealed history. A mutated / same-height / shorter node
 is rejected (verify-before-adopt).
 
   gnfp-node --peer de.restoreprivacy.online:1474
@@ -168,7 +168,7 @@ is rejected (verify-before-adopt).
 
 While behind the network tip the CLI prints sync progress as
 local vs network height. Once at tip-height it prints a tip-height
-line whenever the book advances.
+line whenever the node advances.
 
 Public peers stay TLS. --notls is local plaintext only.
 `;
@@ -192,10 +192,10 @@ Use a real gnfp1 address. Local stratum is plaintext unless you pass
 --tls-cert / --tls-key (or GNFP_TLS_CERT / GNFP_TLS_KEY).
 
 A miner hashing here is a solo miner. Join relays its shares into the
-live book. This node reports it to the explorer (POST /api/nodes
+live node. This node reports it to the explorer (POST /api/nodes
 role=solo) so the explorer Solo table can list it.
 
-When a share seals a block on the live book the hub prints:
+When a share seals a block on the live node the hub prints:
 
   block found {height, hash, previousHash, miner, amount, …}
 `;
@@ -203,7 +203,7 @@ When a share seals a block on the live book the hub prints:
   if (t === 'data') {
     return `gnfp-node help data${version ? ` (${version})` : ''}
 
-Data location (where the book lives):
+Data location (where the node lives):
 
   default Unix     ~/.gnfp-node
   default Windows  %USERPROFILE%\\.gnfp-node
@@ -214,7 +214,7 @@ Files:
   blocks.jsonl.gz    append-only gzip batches of sealed blocks
   blocks.jsonl       legacy uncompressed fallback (still readable)
 
-The gzip book is compressed and append-only so a long chain is not
+The gzip node store is compressed and append-only so a long chain is not
 rewritten on every poll. Restart resumes the last tip, not height 0.
 
   gnfp-node --data-dir D:\\gnfp-book --print-config
