@@ -96,8 +96,17 @@ export function hashesProvenByShare(bits = SHARE_DIFFICULTY_BITS) {
 export const BOOK_LAW_ID = 'gnfp-book-law-1';
 /** Bonus credits on each accepted hash commit. Pot share confirms on block found. Not a flag. Not env. */
 export const HASH_COMMIT_ON_ACCEPT = 1;
+/** One open-window hash row per miner. Not a flag. Not env. */
+export const HASH_TX_COLLATE = 1;
+/** Hash txs stay unconfirmed until a block forms. Not a flag. Not env. */
+export const HASH_TX_CONFIRM_ON_BLOCK = 1;
+/** Wallet sends confirm on the same miner-work block. Not a flag. Not env. */
+export const USER_TX_CONFIRM_ON_BLOCK = 1;
 export const HASH_TX_KIND = 'hash';
+export const USER_TX_KIND = 'send';
 export const BLOCK_POT_TX_KIND = 'mine';
+/** Only proven miner work mints. Sends move existing GNFP. Not a flag. Not env. */
+export const MINER_MINT_ONLY = 1;
 export function bookLawFingerprint() {
   return [
     BOOK_LAW_ID,
@@ -111,6 +120,10 @@ export function bookLawFingerprint() {
     hashesProvenByShare(SHARE_DIFFICULTY_BITS),
     PUBLIC_TX_PREVIEW,
     HASH_COMMIT_ON_ACCEPT,
+    HASH_TX_COLLATE,
+    HASH_TX_CONFIRM_ON_BLOCK,
+    USER_TX_CONFIRM_ON_BLOCK,
+    MINER_MINT_ONLY,
   ].join(':');
 }
 
@@ -146,6 +159,12 @@ export function targetBlockIntervalMs() {
 /** Time never forms a block. Only a hash that meets the book target. */
 export function canFormBlock({ blockHashMet } = {}) {
   return blockHashMet === true;
+}
+
+/** Coinbase / hash bonus only. A send is never mint. */
+export function isMintKind(kind) {
+  const k = String(kind || '');
+  return k === HASH_TX_KIND || k === BLOCK_POT_TX_KIND;
 }
 
 export function coinbaseAmountGnfp() {
@@ -222,8 +241,9 @@ export function hashCommitBonusNanos(hashes) {
 }
 
 /**
- * One propagating hash transaction per committed share.
- * Confirms with the formed block; pot share is a separate mine tx.
+ * Each accepted share is a real hash transaction (bonus nanos).
+ * Unconfirmed until block found. The formed block bundles them
+ * (one confirmed row per miner, same total nanos) in one step.
  */
 export function hashCommitTx({
   to,
@@ -249,6 +269,66 @@ export function hashCommitTx({
     jobId: jobId != null ? String(jobId) : undefined,
     at: Number(at) || undefined,
   };
+}
+
+/** Merge open-window hash commits to one row per miner. Immutable collation. */
+export function collateHashCommits(txs = []) {
+  const by = new Map();
+  for (const t of Array.isArray(txs) ? txs : []) {
+    const to = String(t?.to || '').trim();
+    if (!to) continue;
+    const n = Math.max(0, Math.floor(Number(t.hashes) || 0));
+    const nanos = t.nanos != null ? Math.max(0, Math.floor(Number(t.nanos) || 0)) : hashCommitBonusNanos(n);
+    const prev = by.get(to) || {
+      id: `hash-open-${to.slice(0, 8)}`,
+      kind: HASH_TX_KIND,
+      asset: 'GNFP',
+      from: 'coinbase',
+      to,
+      hashes: 0,
+      nanos: 0,
+      amount: 0,
+      shares: 0,
+      confirmed: false,
+      height: 0,
+      lastAt: 0,
+    };
+    prev.hashes += n;
+    prev.nanos += nanos;
+    prev.amount = prev.nanos / NANOS_PER_GNFP;
+    prev.shares += Math.max(1, Math.floor(Number(t.shares) || 1));
+    prev.height = Number(t.height) || prev.height;
+    prev.lastAt = Math.max(Number(prev.lastAt) || 0, Number(t.at) || 0);
+    by.set(to, prev);
+  }
+  return [...by.values()].sort((a, b) => Number(b.lastAt || 0) - Number(a.lastAt || 0));
+}
+
+/** Hash txs confirm only when the block forms. */
+export function confirmHashTxs(txs = [], height = 0) {
+  const h = Number(height) || 0;
+  return (Array.isArray(txs) ? txs : []).map((t) => ({
+    ...t,
+    kind: HASH_TX_KIND,
+    confirmed: true,
+    height: h || Number(t.height) || 0,
+    id: String(t.id || '').replace(/^hash-open-/, 'hash-block-') || `hash-block-${h}`,
+  }));
+}
+
+/** Block found: collate every open hash commit, then confirm. O(miners), not O(shares). */
+export function bundleHashTxsForBlock(commits, height = 0) {
+  return confirmHashTxs(collateHashCommits(commits), height);
+}
+
+/** Wallet send/receive rows confirm only when miner work forms the block. */
+export function confirmUserTxs(txs = [], height = 0) {
+  const h = Number(height) || 0;
+  return (Array.isArray(txs) ? txs : []).map((t) => ({
+    ...t,
+    confirmed: true,
+    height: h || Number(t.height) || 0,
+  }));
 }
 
 /** Wallet credit at block form: 1 GNFP pot split only. Bonus already committed. */
@@ -355,6 +435,10 @@ export function bookLawOnTip({
     bookLawId: BOOK_LAW_ID,
     bookLawFingerprint: bookLawFingerprint(),
     hashCommitOnAccept: HASH_COMMIT_ON_ACCEPT,
+    hashTxCollate: HASH_TX_COLLATE,
+    hashTxConfirmOnBlock: HASH_TX_CONFIRM_ON_BLOCK,
+    userTxConfirmOnBlock: USER_TX_CONFIRM_ON_BLOCK,
+    minerMintOnly: MINER_MINT_ONLY,
     hashTxKind: HASH_TX_KIND,
   };
 }

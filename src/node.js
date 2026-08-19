@@ -18,7 +18,7 @@ import {
   SEED_NODES,
 } from './cli_status.js';
 
-export const VERSION = '1.1.8';
+export const VERSION = '1.1.9';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = renderHelp('', VERSION);
@@ -53,7 +53,7 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
     replicaOnly: argv.includes('--replica-only'),
     join: !argv.includes('--equal') && !argv.includes('--book') && !argv.includes('--replica-only'),
     dataDir: flag(argv, '--data-dir', env.GNFP_NODE_DATA || defaultDataDir(env)),
-    pollMs: Number(flag(argv, '--poll-ms', env.GNFP_NODE_POLL_MS || '4000')),
+    pollMs: Number(flag(argv, '--poll-ms', env.GNFP_NODE_POLL_MS || '1000')),
     announceHost: flag(argv, '--announce-host', env.GNFP_ANNOUNCE_HOST || ''),
     announceUrl: flag(
       argv,

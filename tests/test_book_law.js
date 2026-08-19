@@ -28,7 +28,15 @@ import {
   bookLawFingerprint,
   BOOK_LAW_ID,
   HASH_COMMIT_ON_ACCEPT,
+  HASH_TX_COLLATE,
+  HASH_TX_CONFIRM_ON_BLOCK,
+  USER_TX_CONFIRM_ON_BLOCK,
+  MINER_MINT_ONLY,
+  isMintKind,
   hashCommitTx,
+  collateHashCommits,
+  bundleHashTxsForBlock,
+  confirmUserTxs,
   blockFormWalletNanos,
   networkDifficulty,
   noteMinerHashes,
@@ -61,13 +69,38 @@ test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
   assert.equal(hashesProvenByShare(14), 16384);
   assert.equal(retargetBits(0, 31, 90_000, {}), 31);
   assert.equal(BOOK_LAW_ID, 'gnfp-book-law-1');
-  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10:1');
+  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10:1:1:1:1:1');
   assert.equal(HASH_COMMIT_ON_ACCEPT, 1);
+  assert.equal(HASH_TX_COLLATE, 1);
+  assert.equal(HASH_TX_CONFIRM_ON_BLOCK, 1);
+  assert.equal(USER_TX_CONFIRM_ON_BLOCK, 1);
+  assert.equal(MINER_MINT_ONLY, 1);
+  assert.equal(isMintKind('hash'), true);
+  assert.equal(isMintKind('mine'), true);
+  assert.equal(isMintKind('send'), false);
+  assert.equal(isMintKind('receive'), false);
+  assert.equal(canFormBlock({ blockHashMet: false }), false);
+  assert.equal(canFormBlock({ blockHashMet: true }), true);
+  const pendingSend = { id: 's1', kind: 'send', from: 'alice', to: 'bob', amount: 2, confirmed: false };
+  const sealedSend = confirmUserTxs([pendingSend], 12);
+  assert.equal(sealedSend.length, 1);
+  assert.equal(sealedSend[0].confirmed, true);
+  assert.equal(sealedSend[0].height, 12);
+  assert.equal(sealedSend[0].amount, 2);
   const commit = hashCommitTx({ to: 'gnfp1alice', hashes: 7, jobId: 'j1' });
   assert.equal(commit.kind, 'hash');
   assert.equal(commit.nanos, 7);
   assert.equal(commit.amount, 7 / NANOS_PER_GNFP);
   assert.equal(commit.confirmed, false);
+  const many = [];
+  for (let i = 0; i < 1000; i += 1) {
+    many.push(hashCommitTx({ to: i % 2 ? 'bob' : 'alice', hashes: 14, jobId: `j${i}` }));
+  }
+  const bundled = bundleHashTxsForBlock(many, 99);
+  assert.equal(bundled.length, 2);
+  assert.ok(bundled.every((t) => t.confirmed === true && t.height === 99));
+  assert.equal(bundled.find((t) => t.to === 'alice').hashes, 14 * 500);
+  assert.equal(collateHashCommits(many).length, 2);
   const pot = blockFormWalletNanos({ alice: 7, bob: 3 }, 990);
   assert.equal(pot.alice + pot.bob, 990);
   const tip = bookLawOnTip();

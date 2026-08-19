@@ -24,6 +24,7 @@ import {
   HASH_BONUS_GNFP,
   NANOS_PER_GNFP,
   hashCommitTx,
+  bundleHashTxsForBlock,
   blockFormWalletNanos,
 } from './book_law.js';
 import { hashMeetsJob, gnfpWorkHash, meetsTarget } from './cpu_pow.js';
@@ -266,9 +267,9 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       (s, n) => s + Math.max(0, Math.floor(Number(n) || 0)),
       0,
     );
-    const hashTxs = pendingHashTxs.splice(0, pendingHashTxs.length);
-    const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const nextHeight = height + 1;
+    const hashTxs = bundleHashTxsForBlock(pendingHashTxs.splice(0, pendingHashTxs.length), nextHeight);
+    const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const sealed = sealBlock(
       {
         height: nextHeight,

@@ -37,7 +37,7 @@ export function joinConfig(env = process.env, argv = process.argv) {
     replicaOnly: env.GNFP_REPLICA_ONLY === '1',
     tls: defaultUseTls(argv, env),
     dataDir: env.GNFP_NODE_DATA || defaultDataDir(env),
-    pollMs: Number(env.GNFP_NODE_POLL_MS || 4000),
+    pollMs: Number(env.GNFP_NODE_POLL_MS || 1000),
   };
 }
 
