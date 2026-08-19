@@ -100,7 +100,7 @@ export function main(argv = process.argv) {
   );
   printer.watchingSeeds(SEED_NODES);
   printer.syncStart({ peer, localHeight: 0, networkHeight: '?' });
-  const live = { ...cfg, printer };
+  const live = { ...cfg, printer, version: VERSION };
   if (cfg.replicaOnly || cfg.join) {
     startJoinNode({
       ...joinConfig(),
@@ -121,6 +121,7 @@ export function main(argv = process.argv) {
           host: cfg.announceHost,
           port: cfg.listenStratum,
           role: cfg.role,
+          version: VERSION,
         }),
       }).catch(() => {});
     };

@@ -27,6 +27,9 @@ import {
   hashesProvenByShare,
   bookLawFingerprint,
   BOOK_LAW_ID,
+  HASH_COMMIT_ON_ACCEPT,
+  hashCommitTx,
+  blockFormWalletNanos,
   networkDifficulty,
   noteMinerHashes,
   retargetBits,
@@ -58,7 +61,15 @@ test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
   assert.equal(hashesProvenByShare(14), 16384);
   assert.equal(retargetBits(0, 31, 90_000, {}), 31);
   assert.equal(BOOK_LAW_ID, 'gnfp-book-law-1');
-  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10');
+  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10:1');
+  assert.equal(HASH_COMMIT_ON_ACCEPT, 1);
+  const commit = hashCommitTx({ to: 'gnfp1alice', hashes: 7, jobId: 'j1' });
+  assert.equal(commit.kind, 'hash');
+  assert.equal(commit.nanos, 7);
+  assert.equal(commit.amount, 7 / NANOS_PER_GNFP);
+  assert.equal(commit.confirmed, false);
+  const pot = blockFormWalletNanos({ alice: 7, bob: 3 }, 990);
+  assert.equal(pot.alice + pot.bob, 990);
   const tip = bookLawOnTip();
   assert.equal(tip.bookLawFingerprint, bookLawFingerprint());
   assert.equal(tip.liveMinDifficultyBits, 14);

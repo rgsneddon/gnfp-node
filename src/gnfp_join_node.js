@@ -332,7 +332,9 @@ export function startJoinNode(opts = {}) {
     () => ({
       host: soloHost,
       port: cfg.listenStratum || 1474,
-      threads: stratum && typeof stratum.minerCount === 'function' ? stratum.minerCount() : 0,
+      role: cfg.role || 'join',
+      version: cfg.version || '',
+      threads: 0,
     }),
     { announceUrl: cfg.announceUrl, fetchImpl: opts.fetchImpl },
   );

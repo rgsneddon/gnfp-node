@@ -136,6 +136,10 @@ test('equal-book credits hashesProvenByShare, not 1, and stats cannot enlarge th
   assert.equal(got.sealed, undefined);
   assert.equal(got.block?.formed, false);
   const proven = hashesProvenByShare(14);
+  assert.equal(got.hashTx.kind, 'hash');
+  assert.equal(got.hashTx.nanos, proven);
+  assert.equal(got.hashTx.confirmed, false);
+  assert.equal(book.minerNanos()['gnfp1alice.worker'], proven);
   const before = book.hashWindowSnapshot();
   const n = Object.values(before).reduce((s, v) => s + Math.max(0, Math.floor(Number(v) || 0)), 0);
   assert.equal(n, proven);
@@ -162,4 +166,8 @@ test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
   const proven = hashesProvenByShare(14);
   assert.equal(got.sealed.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(proven));
   assert.equal(got.sealed.amount, 1 + proven / 1e9);
+  const pot = Number(got.sealed.potSplits['gnfp1carol.worker'] || 0);
+  assert.equal(book.minerNanos()['gnfp1carol.worker'], proven + pot);
+  assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'hash' && t.confirmed === true));
+  assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'mine'));
 });

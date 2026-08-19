@@ -23,6 +23,8 @@ import {
   retargetBits,
   HASH_BONUS_GNFP,
   NANOS_PER_GNFP,
+  hashCommitTx,
+  blockFormWalletNanos,
 } from './book_law.js';
 import { hashMeetsJob, gnfpWorkHash, meetsTarget } from './cpu_pow.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
@@ -38,9 +40,10 @@ export function startEqualNode(cfg = {}) {
     () => ({
       host: soloHost,
       port: cfg.listenStratum || 1474,
-      threads: book.minerCount(),
+      role: 'solo',
+      version: cfg.version || '',
+      threads: book.cpuThreadCount(),
       accepted: book.acceptedCount(),
-      hashrate: book.acceptedCount(),
     }),
     {
       announceUrl: cfg.announceUrl,
@@ -111,8 +114,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   let jobSeq = 1;
   let job = null;
   const miners = new Set();
+  const minerCpu = new Map();
   let hashWindow = emptyHashWindow();
   const hashMarks = new Map();
+  const pendingHashTxs = [];
+  const minerNanos = Object.create(null);
   let lastFormedAt = 0;
   let lastBlockBits = GENESIS_DIFFICULTY_BITS;
 
@@ -127,6 +133,28 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       hashWindowStart = Date.now();
       hashWindowCount = 1;
     }
+  }
+
+  function noteCpuThreads(username, raw) {
+    if (raw == null || raw === '') return;
+    const n = Math.floor(Number(raw));
+    if (!Number.isFinite(n) || n < 0) return;
+    const key = String(username || '').trim();
+    if (!key) return;
+    minerCpu.set(key, Math.min(256, n));
+  }
+
+  function cpuThreadCount() {
+    let sum = 0;
+    for (const n of minerCpu.values()) sum += n;
+    return sum;
+  }
+
+  function creditMiner(username, nanos) {
+    const key = String(username || '').trim();
+    const add = Math.max(0, Math.floor(Number(nanos) || 0));
+    if (!key || add <= 0) return;
+    minerNanos[key] = (Number(minerNanos[key]) || 0) + add;
   }
 
   function shareJobBits() {
@@ -191,7 +219,7 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     return job;
   }
 
-  function submitShare({ username = 'anon', nonce = '', jobId = '', client = '' } = {}) {
+  function submitShare({ username = 'anon', nonce = '', jobId = '', client = '', threads } = {}) {
     const current = job || nextJob();
     if (jobId && String(jobId) !== String(current.jobId) && String(jobId) !== String(current.id)) {
       return { accepted: false, reason: 'stale_job', asset: GNFP_BOOK.coin };
@@ -204,22 +232,41 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     }
     noteHash();
     const miner = String(username || 'anon');
+    noteCpuThreads(miner, threads);
     const shareBits = Math.max(SHARE_DIFFICULTY_BITS, Math.floor(Number(current.difficulty) || SHARE_DIFFICULTY_BITS));
-    hashWindow = noteMinerHashes(hashWindow, miner, hashesProvenByShare(shareBits));
+    const proven = hashesProvenByShare(shareBits);
+    hashWindow = noteMinerHashes(hashWindow, miner, proven);
     acceptedCount += 1;
+    const hashTx = hashCommitTx({
+      to: miner,
+      hashes: proven,
+      height,
+      jobId: current.jobId,
+    });
+    pendingHashTxs.push(hashTx);
+    creditMiner(miner, hashTx.nanos);
     const workHash = gnfpWorkHash(current.input || current.preWork, nonce, '');
     const needBits = formBits();
     const blockHashMet = meetsTarget(workHash, needBits);
     if (!canFormBlock({ blockHashMet })) {
-      return { accepted: true, asset: GNFP_BOOK.coin, block: { formed: false } };
+      return {
+        accepted: true,
+        asset: GNFP_BOOK.coin,
+        block: { formed: false },
+        hashTx,
+      };
     }
     const settled = settleWindowCredits(hashWindow);
+    for (const [who, nanos] of Object.entries(settled.potSplits || {})) {
+      creditMiner(who, nanos);
+    }
     hashWindow = settled.nextWindow;
     hashMarks.clear();
     const bonusTotalNanos = Object.values(settled.bonusNanos || {}).reduce(
       (s, n) => s + Math.max(0, Math.floor(Number(n) || 0)),
       0,
     );
+    const hashTxs = pendingHashTxs.splice(0, pendingHashTxs.length);
     const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const nextHeight = height + 1;
     const sealed = sealBlock(
@@ -232,6 +279,18 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         hashBonusGnfp: HASH_BONUS_GNFP,
         creditsNanos: settled.totalsNanos,
         bonusNanos: settled.bonusNanos,
+        potSplits: settled.potSplits,
+        transactions: [
+          ...hashTxs.map((t) => ({ ...t, confirmed: true, height: nextHeight })),
+          {
+            id: `block-${nextHeight}`,
+            kind: 'mine',
+            from: 'coinbase',
+            to: 'miners',
+            amount: BLOCK_REWARD_GNFP + bonusTotalNanos / NANOS_PER_GNFP,
+            asset: GNFP_BOOK.coin,
+          },
+        ],
         difficulty: needBits,
         foundAt: Date.now(),
         from: 'coinbase',
@@ -258,6 +317,7 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       asset: GNFP_BOOK.coin,
       block: { formed: true, height, hash: sealed.hash, ...sealed },
       sealed,
+      hashTx,
     };
   }
 
@@ -367,6 +427,7 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   function listenStratum(port = 0, tlsOpts = null) {
     const onSock = (sock) => {
       miners.add(sock);
+      let who = '';
       let buf = '';
       const send = (obj) => {
         try { sock.write(`${JSON.stringify(obj)}\n`); } catch { /* drop */ }
@@ -382,17 +443,22 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
           try { msg = JSON.parse(line); } catch { continue; }
           const method = String(msg.method || '');
           if (method === 'login') {
+            who = msg.login || msg.user || who;
+            noteCpuThreads(who, msg.threads);
             send({ id: msg.id, result: true, description: 'Login Successful', coin: GNFP_BOOK.coin });
             send({ method: 'job', ...nextJob() });
             for (const hook of shareHooks) {
               try { hook(); } catch { /* solo announce */ }
             }
           } else if (method === 'submit') {
+            who = msg.login || msg.user || who;
+            noteCpuThreads(who, msg.threads);
             const got = submitShare({
-              username: msg.login || msg.user,
+              username: who,
               nonce: msg.nonce,
               jobId: msg.jobId || msg.id,
               client: msg.client,
+              threads: msg.threads,
             });
             send({
               id: msg.id,
@@ -402,16 +468,24 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             });
             if (got.accepted) send({ method: 'job', ... (job || nextJob()) });
           } else if (method === 'stats') {
+            who = msg.login || msg.user || who;
+            noteCpuThreads(who, msg.threads);
             ingestStats({
-              username: msg.login || msg.user,
+              username: who,
               hashes: msg.hashes,
             });
             send({ result: true, coin: GNFP_BOOK.coin });
           }
         }
       });
-      sock.on('close', () => miners.delete(sock));
-      sock.on('error', () => miners.delete(sock));
+      sock.on('close', () => {
+        miners.delete(sock);
+        if (who) minerCpu.delete(who);
+      });
+      sock.on('error', () => {
+        miners.delete(sock);
+        if (who) minerCpu.delete(who);
+      });
     };
     const server = tlsOpts ? tls.createServer(tlsOpts, onSock) : net.createServer(onSock);
     server.on('error', (err) => {
@@ -452,6 +526,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     blocks: () => blocks.slice(),
     height: () => height,
     minerCount: () => miners.size,
+    cpuThreadCount,
+    minerNanos: () => ({ ...minerNanos }),
     acceptedCount: () => acceptedCount,
     onShare: (fn) => {
       if (typeof fn === 'function') shareHooks.push(fn);

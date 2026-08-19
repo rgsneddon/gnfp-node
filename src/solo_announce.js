@@ -49,21 +49,35 @@ export function announceUrls(extra = '', env = process.env) {
   return out;
 }
 
+export function sanitizeNodeVersion(raw) {
+  const s = String(raw || '').trim();
+  if (!s || s.length > 16) return '';
+  if (!/^\d{1,3}(\.\d{1,3}){0,2}$/.test(s)) return '';
+  return s;
+}
+
 export function buildSoloAnnounceBody({
   host,
   port = 1474,
+  role = 'solo',
+  version = '',
   hashrate = 0,
   threads = 0,
   accepted = 0,
+  label = '',
 } = {}) {
+  const allowed = new Set(['join', 'pool', 'solo', 'front', 'book', 'exchange']);
+  const r = allowed.has(String(role || '').toLowerCase()) ? String(role).toLowerCase() : 'join';
+  const th = Math.floor(Number(threads));
   return {
     host: String(host || '').trim().toLowerCase(),
     port: Math.max(1, Math.min(65535, Math.floor(Number(port) || 1474))),
-    role: 'solo',
+    role: r,
+    version: sanitizeNodeVersion(version),
     hashrate: Math.max(0, Number(hashrate) || 0),
-    threads: Math.max(0, Math.floor(Number(threads) || 0)),
+    threads: Number.isFinite(th) && th >= 0 ? Math.min(256, th) : 0,
     accepted: Math.max(0, Math.floor(Number(accepted) || 0)),
-    label: 'solo',
+    label: r === 'solo' ? 'solo' : String(label || r).slice(0, 40),
   };
 }
 
@@ -99,7 +113,6 @@ export function startSoloAnnounceLoop(getBody, opts = {}) {
     if (stopped) return;
     const body = typeof getBody === 'function' ? getBody() : getBody;
     if (!body || !body.host) return;
-    if (Number(body.threads || 0) <= 0 && Number(body.accepted || 0) <= 0) return;
     try {
       await postSoloAnnounce(body, { urls, fetchImpl: opts.fetchImpl });
     } catch {

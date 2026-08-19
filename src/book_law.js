@@ -94,6 +94,10 @@ export function hashesProvenByShare(bits = SHARE_DIFFICULTY_BITS) {
 
 /** Frozen consensus identity. A different fingerprint is a different law. */
 export const BOOK_LAW_ID = 'gnfp-book-law-1';
+/** Bonus credits on each accepted hash commit. Pot share confirms on block found. Not a flag. Not env. */
+export const HASH_COMMIT_ON_ACCEPT = 1;
+export const HASH_TX_KIND = 'hash';
+export const BLOCK_POT_TX_KIND = 'mine';
 export function bookLawFingerprint() {
   return [
     BOOK_LAW_ID,
@@ -106,6 +110,7 @@ export function bookLawFingerprint() {
     POOL_FEE_BPS,
     hashesProvenByShare(SHARE_DIFFICULTY_BITS),
     PUBLIC_TX_PREVIEW,
+    HASH_COMMIT_ON_ACCEPT,
   ].join(':');
 }
 
@@ -211,6 +216,46 @@ export function hashBonusGnfp(hashes) {
   return hashBonusNanos(hashes) / NANOS_PER_GNFP;
 }
 
+/** Immediate wallet credit when a hash is committed. Same nanos as the bonus. */
+export function hashCommitBonusNanos(hashes) {
+  return hashBonusNanos(hashes);
+}
+
+/**
+ * One propagating hash transaction per committed share.
+ * Confirms with the formed block; pot share is a separate mine tx.
+ */
+export function hashCommitTx({
+  to,
+  hashes,
+  height,
+  id,
+  jobId,
+  at,
+} = {}) {
+  const n = Math.max(0, Math.floor(Number(hashes) || 0));
+  const nanos = hashCommitBonusNanos(n);
+  return {
+    id: String(id || `hash-${String(jobId || height || '0')}-${n}`),
+    kind: HASH_TX_KIND,
+    asset: 'GNFP',
+    from: 'coinbase',
+    to: String(to || 'miners'),
+    amount: nanos / NANOS_PER_GNFP,
+    hashes: n,
+    nanos,
+    confirmed: false,
+    height: Number(height) || 0,
+    jobId: jobId != null ? String(jobId) : undefined,
+    at: Number(at) || undefined,
+  };
+}
+
+/** Wallet credit at block form: 1 GNFP pot split only. Bonus already committed. */
+export function blockFormWalletNanos(hashCounts, potNanos = BLOCK_REWARD_NANOS) {
+  return splitPotByHashes(hashCounts, potNanos);
+}
+
 export function poolFeePayout() {
   return POOL_FEE_PAYOUT;
 }
@@ -309,5 +354,7 @@ export function bookLawOnTip({
     shareDifficultyBits: SHARE_DIFFICULTY_BITS,
     bookLawId: BOOK_LAW_ID,
     bookLawFingerprint: bookLawFingerprint(),
+    hashCommitOnAccept: HASH_COMMIT_ON_ACCEPT,
+    hashTxKind: HASH_TX_KIND,
   };
 }
