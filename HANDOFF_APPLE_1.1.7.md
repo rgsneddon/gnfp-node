@@ -31,5 +31,7 @@ Listed in the implementer scratch `release-artifacts.txt`:
 
 - `gnfp-node-1.1.7-win.zip`
 - `gnfp-node-1.1.7-unix.zip`
+- `GNFPHash-1.0.2-win.zip`
+- `GNFPHash-1.0.2-unix.zip`
 
-GNFPHash did not need a new Windows pack for this law (hash-count report already ships).
+Windows did not cut Apple `.app` / IPA. Mac cuts those from this pin.
