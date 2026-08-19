@@ -18,6 +18,7 @@ import {
   noteMinerHashes,
   settleWindowCredits,
   HASH_BONUS_GNFP,
+  NANOS_PER_GNFP,
 } from './book_law.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
@@ -191,6 +192,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     const settled = settleWindowCredits(hashWindow);
     hashWindow = settled.nextWindow;
     hashMarks.clear();
+    const bonusTotalNanos = Object.values(settled.bonusNanos || {}).reduce(
+      (s, n) => s + Math.max(0, Math.floor(Number(n) || 0)),
+      0,
+    );
     const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const nextHeight = height + 1;
     const sealed = sealBlock(
@@ -198,9 +203,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         height: nextHeight,
         jobId: current.jobId,
         miner,
-        amount: BLOCK_REWARD_GNFP,
+        amount: BLOCK_REWARD_GNFP + bonusTotalNanos / NANOS_PER_GNFP,
         blockRewardGnfp: BLOCK_REWARD_GNFP,
         hashBonusGnfp: HASH_BONUS_GNFP,
+        creditsNanos: settled.totalsNanos,
+        bonusNanos: settled.bonusNanos,
         difficulty: jobBits,
         foundAt: Date.now(),
         from: 'coinbase',

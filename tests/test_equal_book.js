@@ -3,9 +3,10 @@ import { test } from 'node:test';
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import { GNFP_BOOK } from '../src/chronoflux_chain.js';
+import { GNFP_BOOK, hashMatches } from '../src/chronoflux_chain.js';
 import { hashMeetsJob } from '../src/cpu_pow.js';
 import { createEqualBook } from '../src/equal_book.js';
+import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, hashBonusGnfp } from '../src/book_law.js';
 
 function scratchDir() {
   const root = process.env.GROK_GOAL_SCRATCH
@@ -37,7 +38,11 @@ test('lone node settles a miner share and keeps the tip after restart', () => {
     client: 'GNFPHash',
   });
   assert.equal(got.accepted, true, got.reason);
-  assert.equal(a.tip().height, 1);
+  assert.equal(got.sealed.blockRewardGnfp, BLOCK_REWARD_GNFP);
+  assert.equal(got.sealed.hashBonusGnfp, HASH_BONUS_GNFP);
+  assert.equal(got.sealed.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(1));
+  assert.equal(got.sealed.bonusNanos['gnfp1alice.worker'] ?? got.sealed.bonusNanos.gnfp1alice, 1);
+  assert.equal(hashMatches(got.sealed), true);
   const hash = a.tip().tipHash;
   const b = createEqualBook({ dataDir: dir, bits: 1 });
   assert.equal(b.tip().height, 1);

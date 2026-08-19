@@ -24,7 +24,7 @@ import {
   settleWindowCredits,
 } from '../src/book_law.js';
 import { tipIdentity } from '../src/book_pull.js';
-import { hashBlock, sealBlock } from '../src/chronoflux_chain.js';
+import { hashBlock, hashMatches, sealBlock } from '../src/chronoflux_chain.js';
 
 test('book law: time never mints; reward and dust are fixed', () => {
   assert.equal(canFormBlock({ blockHashMet: false }), false);
@@ -120,14 +120,18 @@ test('tip identity carries book law; old seals keep their hash', () => {
   const withLaw = sealBlock({
     height: 2,
     miner: 'gnfp1test',
-    amount: BLOCK_REWARD_GNFP,
+    amount: BLOCK_REWARD_GNFP + HASH_BONUS_GNFP,
     blockRewardGnfp: BLOCK_REWARD_GNFP,
+    hashBonusGnfp: HASH_BONUS_GNFP,
     difficulty: 12,
     foundAt: 2,
     from: 'coinbase',
     to: 'miners',
   }, sealed.hash);
   assert.equal(withLaw.difficulty, 12);
+  assert.equal(hashBlock(withLaw), withLaw.hash);
+  assert.equal(hashMatches(withLaw), true);
+  assert.equal(hashMatches(sealed), true);
   const tip = tipIdentity({ blocks: [sealed, withLaw] }, { hashrate: 280 });
   assert.equal(tip.blockRewardGnfp, 1);
   assert.ok(tip.difficultyBits >= 1);
