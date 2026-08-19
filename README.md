@@ -2,7 +2,7 @@
 
 Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live book. Germany and Singapore are well-known peers, not masters.
 
-**Pin:** `1.1.6`  
+**Pin:** `1.1.7`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
@@ -11,7 +11,7 @@ Run **your own $GNFP node**. Same chain as everyone else. Join is **on from laun
 |---|---|
 | Wallet **0.1.2** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.2 |
 | Miner **GNFPHash 1.0.1** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.1 |
-| Node **1.1.6** | https://github.com/rgsneddon/gnfp-node |
+| Node **1.1.7** | https://github.com/rgsneddon/gnfp-node |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
 

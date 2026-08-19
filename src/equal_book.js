@@ -14,6 +14,10 @@ import {
   blockBitsFromHashrate,
   bookLawOnTip,
   canFormBlock,
+  emptyHashWindow,
+  noteMinerHashes,
+  settleWindowCredits,
+  HASH_BONUS_GNFP,
 } from './book_law.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
@@ -101,6 +105,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   let jobSeq = 1;
   let job = null;
   const miners = new Set();
+  let hashWindow = emptyHashWindow();
+  const hashMarks = new Map();
 
   function liveHashrate() {
     const dt = Math.max(1, (Date.now() - hashWindowStart) / 1000);
@@ -176,19 +182,25 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
     }
     noteHash();
+    const miner = String(username || 'anon');
+    hashWindow = noteMinerHashes(hashWindow, miner, 1);
     const jobBits = Math.max(1, Math.floor(Number(current.difficulty) || currentBits()));
     if (!canFormBlock({ blockHashMet: hashMeetsJob(current, nonce, '') })) {
       return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
     }
+    const settled = settleWindowCredits(hashWindow);
+    hashWindow = settled.nextWindow;
+    hashMarks.clear();
     const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const nextHeight = height + 1;
     const sealed = sealBlock(
       {
         height: nextHeight,
         jobId: current.jobId,
-        miner: String(username || 'anon'),
+        miner,
         amount: BLOCK_REWARD_GNFP,
         blockRewardGnfp: BLOCK_REWARD_GNFP,
+        hashBonusGnfp: HASH_BONUS_GNFP,
         difficulty: jobBits,
         foundAt: Date.now(),
         from: 'coinbase',
@@ -358,6 +370,15 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             });
             if (got.accepted) send({ method: 'job', ... (job || nextJob()) });
           } else if (method === 'stats') {
+            const who = String(msg.login || msg.user || '');
+            const hashes = Number(msg.hashes);
+            if (who && Number.isFinite(hashes) && hashes >= 0) {
+              const prev = hashMarks.get(who);
+              if (prev != null && hashes >= prev) {
+                hashWindow = noteMinerHashes(hashWindow, who, hashes - prev);
+              }
+              hashMarks.set(who, hashes);
+            }
             send({ result: true, coin: GNFP_BOOK.coin });
           }
         }
