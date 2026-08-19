@@ -97,9 +97,15 @@ export function createJoinStratumServer(opts = {}) {
 }
 
 export async function fetchHubNetwork(hubHttp = DEFAULT_HUB_HTTP, fetchImpl = fetch) {
-  const res = await fetchImpl(hubHttp, { cache: 'no-store' });
-  const json = await res.json();
-  return json && typeof json === 'object' ? json : {};
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => { try { ctrl?.abort(); } catch { /* ignore */ } }, 4000);
+  try {
+    const res = await fetchImpl(hubHttp, { cache: 'no-store', signal: ctrl?.signal });
+    const json = await res.json();
+    return json && typeof json === 'object' ? json : {};
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function createJoinHttpServer({
@@ -120,10 +126,32 @@ export function createJoinHttpServer({
     try {
       if ((url === '/api/sync' || url === '/gnfp/api/sync') && req.method === 'POST') {
         const chunks = [];
-        req.on('data', (c) => chunks.push(c));
+        let bytes = 0;
+        req.on('data', (c) => {
+          bytes += c.length;
+          if (bytes > 1_000_000) {
+            req.destroy();
+            return;
+          }
+          chunks.push(c);
+        });
         req.on('end', () => {
           try {
+            if (bytes > 1_000_000) {
+              ok(413, { ok: false, reason: 'sync_too_large', coin: GNFP_TICKER });
+              return;
+            }
             const book = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+            if (!Array.isArray(book.blocks) || !book.blocks.length) {
+              ok(200, {
+                ok: true,
+                coin: GNFP_TICKER,
+                synced: false,
+                tipOnly: true,
+                verifyBeforeAdopt: true,
+              });
+              return;
+            }
             const adopted = adoptReplicaBook(getReplicaBook(), book);
             if (!adopted.ok) {
               ok(409, { ok: false, reason: adopted.reason, coin: GNFP_TICKER });
@@ -291,6 +319,9 @@ export function createJoinHttpServer({
       ok(502, { ok: false, reason: 'hub_unreachable', error: String(err?.message || err) });
     }
   });
+  server.requestTimeout = 4_000;
+  server.headersTimeout = 4_000;
+  server.timeout = 8_000;
   server.on('error', (err) => {
     console.error(`gnfp-node join http bind failed :${port} — ${err.code || err.message} (CLI keeps running)`);
   });

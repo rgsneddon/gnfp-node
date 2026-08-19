@@ -419,6 +419,9 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         }
       });
     });
+    server.requestTimeout = 4_000;
+    server.headersTimeout = 4_000;
+    server.timeout = 8_000;
     server.on('error', (err) => {
       console.error(`gnfp-node http bind failed :${port} — ${err.code || err.message} (CLI keeps running)`);
     });

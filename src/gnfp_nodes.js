@@ -10,7 +10,7 @@ export const DEFAULT_GNFP_NODE_ID = 'germany';
 export const GNFP_NODES = Object.freeze([
   Object.freeze({
     id: 'germany',
-    label: 'Germany (book)',
+    label: 'Germany (node)',
     host: 'de.restoreprivacy.online',
     port: 1474,
     stratum: 'de.restoreprivacy.online:1474',
