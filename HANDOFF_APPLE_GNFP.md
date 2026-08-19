@@ -16,6 +16,8 @@ Windows **did not** cut `.app`, IPA, notarized Apple binaries, or a Play-signed 
 | **gnfp-wallet** | **0.1.4** | Windows zip on GitHub `v0.1.4` | **Yes.** macOS (Developer ID + notarize), iOS IPA, release-signed Android APK. |
 | **GNFPHash** | **1.0.2** | existing | **No** unless you already owe an Apple miner rebuild. |
 
+No new node pin after 1.2.2. Live DE pool was patched in place: UI is a 1s snapshot window; GET never walks miners or the chain.
+
 ---
 
 ## Wallet 0.1.4 (Mac work)
@@ -28,32 +30,35 @@ Windows **did not** cut `.app`, IPA, notarized Apple binaries, or a Play-signed 
 3. Sign **Android APK** as GNFP Wallet. Attach `gnfp-wallet-0.1.4-android.apk` to existing GitHub **`v0.1.4`**.
 4. Do **not** reuse the 0.1.3 APK. Do **not** attach 0.0.2 zips to that tag.
 5. Linux/Arch wallet zips: Windows did not cut them. Cut on Mac/Linux if you can.
-6. User-facing copy says **node**, not book (credit screen / TLS hints on master).
+6. User-facing copy says **node**, not book.
 
 ---
 
 ## Node 1.2.2 (no Apple binary)
 
-Already at https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.2
+https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.2
 
-Law unchanged (not env). Fingerprint:
+Law unchanged. Fingerprint:
 
 `gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10:1:1:1:1:1`
 
 - Time never mints. Block found = miner hash meets the node target.
-- Only miners mint: coinbase 1 GNFP + 0.000000001 GNFP per proven hash. `send` never mints.
-- Proven hashes accumulate on **one in-memory path per recipient**. Not public outputs. Block found commits **one hash-path tx per recipient** plus the 1 GNFP pot.
-- Wallet sends confirm on that same miner-work block.
-- 90s retarget / live floor 14 / genesis 21.
+- Only miners mint: 1 GNFP pot + 0.000000001 GNFP per proven hash. `send` never mints.
+- Hash bonus is one in-memory path per recipient; commit on block found.
+- `--print-config` must show `"version":"1.2.2"` and `"minerMintOnly":1`.
 
-`--print-config` must show `"version":"1.2.2"` and `"minerMintOnly":1`.
+Live pool (DE) lean window, not a new pin:
 
-Lean (not law): HTTP request timeout 4s. `/api/sync` ignores tip-only and rejects bodies over 1 MB. Hub fetch aborts at 4s. Pool miner table refreshes every **8s**; first paint uses `/api/tip`. Wallet persist keeps balances + last 200 txs (not 20k mine receipts). Seed log keeps last 64.
+- Tables poll **every 1s** against a **ready snapshot**. `/api/stats` `/api/tip` `/api/hashrates` do not compute on GET.
+- Snapshot rebuilds every 4s off the request path. One share per event-loop turn (all sockets).
+- Wallet persist: balances + last 200 txs. Seed log last 64.
+- Observed after restart: tip/stats/hashrates **200 in 2–6 ms** with **6 miners** while CPU is busy hashing. Height advanced. That is share work, not a hung HTTP loop.
 
 ---
 
 ## Already on GitHub
 
 - Node: https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.2
-- Wallet Windows: https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.4 (`gnfp-wallet-0.1.4-windows.zip` only)
+- Wallet Windows: https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.4
 - Miner: https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.2
+- This file: https://github.com/rgsneddon/gnfp-node/blob/master/HANDOFF_APPLE_GNFP.md
