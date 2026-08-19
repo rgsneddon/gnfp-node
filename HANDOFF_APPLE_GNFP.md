@@ -50,9 +50,10 @@ Law unchanged. Fingerprint:
 Live pool (DE) lean window, not a new pin:
 
 - Tables poll **every 1s** against a **ready snapshot**. `/api/stats` `/api/tip` `/api/hashrates` do not compute on GET.
-- Snapshot rebuilds every 4s off the request path. One share per event-loop turn (all sockets).
+- Each accepted share **patches that miner’s row** in the snapshot (accepted / hashrate / hashes) so a 1s poll shows new numbers. Full snapshot rebuild stays on a background timer.
+- No honest-share accept cap. Duplicate/banned/GPU checks run before hash.
 - Wallet persist: balances + last 200 txs. Seed log last 64.
-- Observed after restart: tip/stats/hashrates **200 in 2–6 ms** with **6 miners** while CPU is busy hashing. Height advanced. That is share work, not a hung HTTP loop.
+- Node pin **1.2.2**. Wallet **0.1.4** (Mac still cuts Apple/Android). GNFPHash **1.0.2**.
 
 ---
 
