@@ -35,6 +35,7 @@ test('lone node settles a miner share and keeps the tip after restart', () => {
     nonce,
     jobId: job.jobId,
     client: 'GNFPHash',
+    version: '1.0.4',
   });
   assert.equal(got.accepted, true, got.reason);
   assert.equal(got.sealed.blockRewardGnfp, BLOCK_REWARD_GNFP);
@@ -99,6 +100,7 @@ test('when the peer is gone the lone book still accepts miners', async () => {
             nonce,
             jobId: msg.jobId,
             client: 'GNFPHash',
+    version: '1.0.4',
             id: 2,
           })}\n`);
         }
@@ -131,6 +133,7 @@ test('equal-book credits hashesProvenByShare, not 1, and stats cannot enlarge th
     nonce,
     jobId: job.jobId,
     client: 'GNFPHash',
+    version: '1.0.4',
   });
   assert.equal(got.accepted, true, got.reason);
   assert.equal(got.sealed, undefined);
@@ -160,6 +163,7 @@ test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
     nonce,
     jobId: job.jobId,
     client: 'GNFPHash',
+    version: '1.0.4',
   });
   assert.equal(got.accepted, true, got.reason);
   assert.equal(got.block.formed, true);
@@ -170,4 +174,35 @@ test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
   assert.equal(book.minerNanos()['gnfp1carol.worker'], proven + pot);
   assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'hash' && t.confirmed === true));
   assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'mine'));
+});
+
+test('GNFPHash 1.0.3 and lower commit zero work on the equal book', () => {
+  const dir = scratchDir();
+  const book = createEqualBook({ dataDir: dir, bits: 14 });
+  const job = book.nextJob();
+  const nonce = findNonce(job);
+  const old = book.submitShare({
+    username: 'gnfp1old.worker',
+    nonce,
+    jobId: job.jobId,
+    client: 'GNFPHash',
+    version: '1.0.3',
+  });
+  assert.equal(old.accepted, false);
+  assert.equal(old.reason, 'miner_update_required');
+  const missing = book.submitShare({
+    username: 'gnfp1old.worker',
+    nonce,
+    jobId: job.jobId,
+    client: 'GNFPHash',
+  });
+  assert.equal(missing.accepted, false);
+  const ok = book.submitShare({
+    username: 'gnfp1ok.worker',
+    nonce,
+    jobId: job.jobId,
+    client: 'GNFPHash',
+    version: '1.0.4',
+  });
+  assert.equal(ok.accepted, true, ok.reason);
 });

@@ -2,7 +2,7 @@
 
 Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live node. Germany and Singapore are well-known peers, not masters.
 
-**Pin:** `1.2.2`  
+**Pin:** `1.2.4`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused
@@ -13,9 +13,9 @@ Proven hashes accumulate on **one in-memory path per recipient wallet**. They ar
 
 | | |
 |---|---|
-| Wallet **0.1.4** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.4 |
-| Miner **GNFPHash 1.0.2** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.2 |
-| Node **1.2.2** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.2 |
+| Wallet **0.1.6** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.6 |
+| Miner **GNFPHash 1.0.4** | https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.4 |
+| Node **1.2.4** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.4 |
 | Pool | https://gnfp.restoreprivacy.online |
 | Explorer | https://explorer.restoreprivacy.online |
 | Mac handoff (all pins) | [HANDOFF_APPLE_GNFP.md](./HANDOFF_APPLE_GNFP.md) |

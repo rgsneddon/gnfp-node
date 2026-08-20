@@ -32,6 +32,7 @@ import { loadNodeStore, saveNodeStore } from './node_store.js';
 import { startSyncLoop } from './node_sync.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
 import { loadOrCreateSoloHost, startSoloAnnounceLoop } from './solo_announce.js';
+import { shouldAdmitMiner } from './miner_admit.js';
 
 export function startEqualNode(cfg = {}) {
   const printer = cfg.printer || createCliPrinter();
@@ -219,13 +220,14 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     return job;
   }
 
-  function submitShare({ username = 'anon', nonce = '', jobId = '', client = '', threads } = {}) {
+  function submitShare({ username = 'anon', nonce = '', jobId = '', client = '', version = '', threads } = {}) {
     const current = job || nextJob();
     if (jobId && String(jobId) !== String(current.jobId) && String(jobId) !== String(current.id)) {
       return { accepted: false, reason: 'stale_job', asset: GNFP_BOOK.coin };
     }
-    if (String(client || '') && String(client) !== 'GNFPHash') {
-      return { accepted: false, reason: 'old_miner_refused', asset: GNFP_BOOK.coin };
+    const admit = shouldAdmitMiner({ version, client });
+    if (!admit.ok) {
+      return { accepted: false, reason: admit.reason, asset: GNFP_BOOK.coin };
     }
     if (!hashMeetsJob(current, nonce, '')) {
       return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
@@ -453,6 +455,20 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
           const method = String(msg.method || '');
           if (method === 'login') {
             who = msg.login || msg.user || who;
+            const admit = shouldAdmitMiner({
+              version: msg.version,
+              client: msg.client,
+            });
+            if (!admit.ok) {
+              send({
+                id: msg.id,
+                error: admit.reason,
+                kick: true,
+                coin: GNFP_BOOK.coin,
+              });
+              try { sock.destroy(); } catch { /* already closed */ }
+              return;
+            }
             noteCpuThreads(who, msg.threads);
             send({ id: msg.id, result: true, description: 'Login Successful', coin: GNFP_BOOK.coin });
             send({ method: 'job', ...nextJob() });
@@ -467,6 +483,7 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
               nonce: msg.nonce,
               jobId: msg.jobId || msg.id,
               client: msg.client,
+              version: msg.version,
               threads: msg.threads,
             });
             send({

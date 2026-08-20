@@ -90,6 +90,7 @@ test('local mine-settle posts a solo check-in via the shipped book', async () =>
     nonce: findNonce(job),
     jobId: job.jobId,
     client: 'GNFPHash',
+    version: '1.0.4',
   });
   assert.equal(got.accepted, true);
   assert.equal(book.acceptedCount(), 1);

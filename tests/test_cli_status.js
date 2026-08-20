@@ -212,6 +212,7 @@ test('local mine-settle prints block found plus the real sealed data-stream', ()
     nonce,
     jobId: job.jobId,
     client: 'GNFPHash',
+    version: '1.0.4',
   });
   assert.equal(got.accepted, true, got.reason);
   const found = lines.find((l) => l.startsWith('block found'));
