@@ -112,7 +112,14 @@ test('when the peer is gone the lone book still accepts miners', async () => {
       }
     });
     sock.on('connect', () => {
-      sock.write(`${JSON.stringify({ method: 'login', login: 'gnfp1bob.worker', threads: 1, id: 1 })}\n`);
+      sock.write(`${JSON.stringify({
+        method: 'login',
+        login: 'gnfp1bob.worker',
+        threads: 1,
+        client: 'GNFPHash',
+        version: '1.0.4',
+        id: 1,
+      })}\n`);
     });
   });
   await new Promise((r) => setTimeout(r, 50));
@@ -205,4 +212,13 @@ test('GNFPHash 1.0.3 and lower commit zero work on the equal book', () => {
     version: '1.0.4',
   });
   assert.equal(ok.accepted, true, ok.reason);
+  const stale = book.submitShare({
+    username: 'gnfp1ok.worker',
+    nonce,
+    jobId: 'gnfp-from-previous-connect',
+    client: 'GNFPHash',
+    version: '1.0.4',
+  });
+  assert.equal(stale.accepted, false);
+  assert.equal(stale.reason, 'stale_job');
 });

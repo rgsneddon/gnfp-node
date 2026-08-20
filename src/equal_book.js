@@ -33,20 +33,33 @@ import { startSyncLoop } from './node_sync.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
 import { loadOrCreateSoloHost, startSoloAnnounceLoop } from './solo_announce.js';
 import { shouldAdmitMiner } from './miner_admit.js';
+import { assessThreadHonesty } from './thread_honesty.js';
+import {
+  HASHRATE_WINDOW_MS,
+  provenHashrateFromAccepts,
+  rollupMinerWorkers,
+} from './miner_rollup.js';
 
 export function startEqualNode(cfg = {}) {
   const printer = cfg.printer || createCliPrinter();
   const book = createEqualBook({ dataDir: cfg.dataDir, printer });
   const soloHost = cfg.announceHost || loadOrCreateSoloHost(cfg.dataDir);
   const solo = startSoloAnnounceLoop(
-    () => ({
-      host: soloHost,
-      port: cfg.listenStratum || 1474,
-      role: 'solo',
-      version: cfg.version || '',
-      threads: book.cpuThreadCount(),
-      accepted: book.acceptedCount(),
-    }),
+    () => {
+      const hon = book.honesty();
+      return {
+        host: soloHost,
+        port: cfg.listenStratum || 1474,
+        role: 'solo',
+        version: cfg.version || '',
+        threads: hon.threads,
+        accepted: book.acceptedCount(),
+        hashrate: hon.hashrate,
+        cpuCores: hon.cpuCores,
+        cpuThreads: hon.cpuThreads,
+        threadHonesty: hon.threadHonesty,
+      };
+    },
     {
       announceUrl: cfg.announceUrl,
       fetchImpl: cfg.fetchImpl,
@@ -108,47 +121,111 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   const emit = printer || null;
   const shareHooks = [];
   let acceptedCount = 0;
-  let hashWindowStart = Date.now();
-  let hashWindowCount = 0;
+  const bookAcceptAt = [];
   const loaded = dataDir ? loadNodeStore(dataDir).book : null;
   let blocks = extractChain(loaded);
   let height = blocks.length ? heightOf(blocks[blocks.length - 1]) : Number(loaded?.height || 0);
   let jobSeq = 1;
   let job = null;
   const miners = new Set();
-  const minerCpu = new Map();
+  const minerInv = new Map();
   let hashWindow = emptyHashWindow();
   const hashMarks = new Map();
   const minerNanos = Object.create(null);
   let lastFormedAt = 0;
   let lastBlockBits = GENESIS_DIFFICULTY_BITS;
 
-  function liveHashrate() {
-    const dt = Math.max(1, (Date.now() - hashWindowStart) / 1000);
-    return hashWindowCount / dt;
+  function minerRec(username) {
+    const key = String(username || '').trim();
+    if (!key) return null;
+    if (!minerInv.has(key)) {
+      minerInv.set(key, {
+        claimed: 0,
+        cpuCores: 0,
+        cpuThreads: 0,
+        acceptAt: [],
+      });
+    }
+    return minerInv.get(key);
   }
 
-  function noteHash() {
-    hashWindowCount += 1;
-    if (Date.now() - hashWindowStart > 60_000) {
-      hashWindowStart = Date.now();
-      hashWindowCount = 1;
+  function liveHashrate(now = Date.now()) {
+    const cut = Number(now) - HASHRATE_WINDOW_MS;
+    while (bookAcceptAt.length && bookAcceptAt[0] <= cut) bookAcceptAt.shift();
+    return provenHashrateFromAccepts(bookAcceptAt, SHARE_DIFFICULTY_BITS, now).hashrate;
+  }
+
+  function noteHash(username, at = Date.now()) {
+    const when = Number(at) || Date.now();
+    bookAcceptAt.push(when);
+    const rec = minerRec(username);
+    if (rec) rec.acceptAt.push(when);
+  }
+
+  function noteCpuInventory(username, { threads, cpuCores, cpuThreads } = {}) {
+    const rec = minerRec(username);
+    if (!rec) return rec;
+    if (threads != null && threads !== '') {
+      const n = Math.floor(Number(threads));
+      if (Number.isFinite(n) && n >= 0) rec.claimed = Math.min(256, n);
     }
+    if (cpuCores != null && cpuCores !== '') {
+      const c = Math.floor(Number(cpuCores));
+      if (Number.isFinite(c) && c > 0) rec.cpuCores = Math.min(256, c);
+    }
+    if (cpuThreads != null && cpuThreads !== '') {
+      const t = Math.floor(Number(cpuThreads));
+      if (Number.isFinite(t) && t > 0) rec.cpuThreads = Math.min(256, t);
+    }
+    return rec;
   }
 
   function noteCpuThreads(username, raw) {
-    if (raw == null || raw === '') return;
-    const n = Math.floor(Number(raw));
-    if (!Number.isFinite(n) || n < 0) return;
-    const key = String(username || '').trim();
-    if (!key) return;
-    minerCpu.set(key, Math.min(256, n));
+    noteCpuInventory(username, { threads: raw });
   }
 
   function cpuThreadCount() {
     let sum = 0;
-    for (const n of minerCpu.values()) sum += n;
+    for (const rec of minerInv.values()) sum += rec.claimed;
     return sum;
+  }
+
+  function workerTag(username) {
+    const raw = String(username || '').trim();
+    const i = raw.lastIndexOf('.');
+    if (i >= 0 && raw.slice(i + 1)) return raw.slice(i + 1).slice(0, 32);
+    return 'miner';
+  }
+
+  function honesty(now = Date.now()) {
+    const workers = [];
+    for (const [who, rec] of minerInv) {
+      const hs = provenHashrateFromAccepts(rec.acceptAt, SHARE_DIFFICULTY_BITS, now);
+      const verdict = assessThreadHonesty({
+        claimed: rec.claimed,
+        cpuCores: rec.cpuCores,
+        cpuThreads: rec.cpuThreads,
+        hashrate: hs.hashrate,
+        accepts: hs.accepts,
+      });
+      workers.push({
+        tag: workerTag(who),
+        threads: rec.claimed,
+        claimedThreads: rec.claimed,
+        cpuCores: rec.cpuCores,
+        cpuThreads: rec.cpuThreads,
+        hashrate: hs.hashrate,
+        accepted: hs.accepts,
+        threadHonesty: verdict.verdict,
+        threadsHonest: verdict.honest,
+        threadHonestyReason: verdict.reason,
+      });
+    }
+    return {
+      ...rollupMinerWorkers('solo', workers),
+      hashrate: liveHashrate(now),
+      workers,
+    };
   }
 
   function creditMiner(username, nanos) {
@@ -220,7 +297,16 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     return job;
   }
 
-  function submitShare({ username = 'anon', nonce = '', jobId = '', client = '', version = '', threads } = {}) {
+  function submitShare({
+    username = 'anon',
+    nonce = '',
+    jobId = '',
+    client = '',
+    version = '',
+    threads,
+    cpuCores,
+    cpuThreads,
+  } = {}) {
     const current = job || nextJob();
     if (jobId && String(jobId) !== String(current.jobId) && String(jobId) !== String(current.id)) {
       return { accepted: false, reason: 'stale_job', asset: GNFP_BOOK.coin };
@@ -232,9 +318,9 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     if (!hashMeetsJob(current, nonce, '')) {
       return { accepted: false, reason: 'below_target', asset: GNFP_BOOK.coin };
     }
-    noteHash();
     const miner = String(username || 'anon');
-    noteCpuThreads(miner, threads);
+    noteCpuInventory(miner, { threads, cpuCores, cpuThreads });
+    noteHash(miner);
     const shareBits = Math.max(SHARE_DIFFICULTY_BITS, Math.floor(Number(current.difficulty) || SHARE_DIFFICULTY_BITS));
     const proven = hashesProvenByShare(shareBits);
     hashWindow = noteMinerHashes(hashWindow, miner, proven);
@@ -369,12 +455,20 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       return { status: 200, json: pullPayload(blocks, parsePullQuery(params), { emissionBook: true }) };
     }
     if (path === '/api/network' || path === '/api/stats') {
+      const hon = honesty();
       return {
         status: 200,
         json: {
           ...tip(),
           ticker: GNFP_BOOK.coin,
           miners: miners.size,
+          hashrate: hon.hashrate,
+          threads: hon.threads,
+          claimedThreads: hon.claimedThreads,
+          cpuCores: hon.cpuCores,
+          cpuThreads: hon.cpuThreads,
+          threadHonesty: hon.threadHonesty,
+          workers: hon.workers,
         },
       };
     }
@@ -469,7 +563,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
               try { sock.destroy(); } catch { /* already closed */ }
               return;
             }
-            noteCpuThreads(who, msg.threads);
+            noteCpuInventory(who, {
+              threads: msg.threads,
+              cpuCores: msg.cpuCores,
+              cpuThreads: msg.cpuThreads,
+            });
             send({ id: msg.id, result: true, description: 'Login Successful', coin: GNFP_BOOK.coin });
             send({ method: 'job', ...nextJob() });
             for (const hook of shareHooks) {
@@ -477,7 +575,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             }
           } else if (method === 'submit') {
             who = msg.login || msg.user || who;
-            noteCpuThreads(who, msg.threads);
+            noteCpuInventory(who, {
+              threads: msg.threads,
+              cpuCores: msg.cpuCores,
+              cpuThreads: msg.cpuThreads,
+            });
             const got = submitShare({
               username: who,
               nonce: msg.nonce,
@@ -485,6 +587,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
               client: msg.client,
               version: msg.version,
               threads: msg.threads,
+              cpuCores: msg.cpuCores,
+              cpuThreads: msg.cpuThreads,
             });
             send({
               id: msg.id,
@@ -495,10 +599,12 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             if (got.accepted) send({ method: 'job', ... (job || nextJob()) });
           } else if (method === 'stats') {
             who = msg.login || msg.user || who;
-            noteCpuThreads(who, msg.threads);
             ingestStats({
               username: who,
               hashes: msg.hashes,
+              threads: msg.threads,
+              cpuCores: msg.cpuCores,
+              cpuThreads: msg.cpuThreads,
             });
             send({ result: true, coin: GNFP_BOOK.coin });
           }
@@ -506,11 +612,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       });
       sock.on('close', () => {
         miners.delete(sock);
-        if (who) minerCpu.delete(who);
+        if (who) minerInv.delete(who);
       });
       sock.on('error', () => {
         miners.delete(sock);
-        if (who) minerCpu.delete(who);
+        if (who) minerInv.delete(who);
       });
     };
     const server = tlsOpts ? tls.createServer(tlsOpts, onSock) : net.createServer(onSock);
@@ -525,10 +631,11 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     };
   }
 
-  function ingestStats({ username, hashes } = {}) {
+  function ingestStats({ username, hashes, threads, cpuCores, cpuThreads } = {}) {
     const who = String(username || '');
     const n = Number(hashes);
     if (who && Number.isFinite(n) && n >= 0) hashMarks.set(who, n);
+    if (who) noteCpuInventory(who, { threads, cpuCores, cpuThreads });
     return { ok: true, window: { ...hashWindow } };
   }
 
@@ -553,6 +660,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     height: () => height,
     minerCount: () => miners.size,
     cpuThreadCount,
+    liveHashrate,
+    honesty,
     minerNanos: () => ({ ...minerNanos }),
     acceptedCount: () => acceptedCount,
     onShare: (fn) => {

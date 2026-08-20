@@ -9,6 +9,21 @@ import { parseNodeArgs, VERSION } from '../src/node.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+test('README how-tos name each 1.2.5 pack and join/equal/miner paths', () => {
+  const md = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  assert.match(md, /\*\*Pin:\*\* `1.2.5`/);
+  assert.match(md, /gnfp-node-1\.2\.5-macos\.tar\.gz/);
+  assert.match(md, /gnfp-node-1\.2\.5-linux\.tar\.gz/);
+  assert.match(md, /gnfp-node-1\.2\.5-windows\.zip/);
+  assert.match(md, /How-to: macOS package/);
+  assert.match(md, /How-to: Linux package/);
+  assert.match(md, /How-to: Windows package/);
+  assert.match(md, /How-to: join the live node/);
+  assert.match(md, /How-to: run an equal \/ solo node/);
+  assert.match(md, /GNFPHash 1\.0\.5/);
+  assert.match(md, /releases\/tag\/v1\.2\.5/);
+});
+
 test('cli help names GNFP join node', () => {
   const r = spawnSync(process.execPath, ['src/node.js', '--help'], {
     cwd: root,

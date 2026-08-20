@@ -13,6 +13,7 @@ import { startSyncLoop } from './node_sync.js';
 import { defaultUseTls, loadTlsOptions } from './stratum_tls.js';
 import { createCliPrinter, createSyncReporter, formatSyncTimeout, isTransientSyncError } from './cli_status.js';
 import { loadOrCreateSoloHost, startSoloAnnounceLoop } from './solo_announce.js';
+import { rollupMinerWorkers } from './miner_rollup.js';
 
 export const DEFAULT_HUB_HOST = GNFP_BOOK.host;
 export const DEFAULT_HUB_STRATUM = GNFP_BOOK.port;
@@ -94,6 +95,13 @@ export function createJoinStratumServer(opts = {}) {
     tls: Boolean(tlsOpts),
     server,
   };
+}
+
+export function hubStatsUrl(hubHttp = DEFAULT_HUB_HTTP) {
+  const raw = String(hubHttp || DEFAULT_HUB_HTTP);
+  if (/\/api\/network\/?$/.test(raw)) return raw;
+  if (/\/api\/tip\/?$/.test(raw)) return raw.replace(/\/api\/tip\/?$/, '/api/network');
+  return `${raw.replace(/\/$/, '')}/api/network`;
 }
 
 export async function fetchHubNetwork(hubHttp = DEFAULT_HUB_HTTP, fetchImpl = fetch) {
@@ -251,20 +259,19 @@ export function createJoinHttpServer({
       if (minerMatch) {
         const tag = decodeURIComponent(minerMatch[1]);
         const cached = getReplicaBook() || {};
-        const workers = (cached.minerWorkers && cached.minerWorkers[tag]) || [];
-        const row = (cached.workers || []).find((w) => w && w.tag === tag);
+        let workers = (cached.minerWorkers && cached.minerWorkers[tag]) || [];
+        let row = (cached.workers || []).find((w) => w && w.tag === tag);
+        if (!workers.length && !row) {
+          const hub = await fetchHubNetwork(hubStatsUrl(hubHttp), fetchImpl);
+          workers = (hub.minerWorkers && hub.minerWorkers[tag]) || [];
+          row = (hub.workers || []).find((w) => w && w.tag === tag);
+        }
         const found = workers.length > 0 || Boolean(row);
         const list = workers.length ? workers : row ? [row] : [];
-        const sum = (key) => list.reduce((s, w) => s + Number(w[key] || 0), 0);
         ok(found ? 200 : 404, {
           ok: found,
           coin: GNFP_TICKER,
-          tag,
-          hashrate: sum('hashrate'),
-          accepted: sum('accepted'),
-          rejected: sum('rejected'),
-          threads: sum('threads'),
-          hashes: sum('hashes'),
+          ...rollupMinerWorkers(tag, list),
           workers: list,
         });
         return;
@@ -302,7 +309,8 @@ export function createJoinHttpServer({
           });
           return;
         }
-        const book = cached || (await fetchHubNetwork(hubHttp, fetchImpl));
+        const hub = await fetchHubNetwork(hubStatsUrl(hubHttp), fetchImpl);
+        const book = (hub && (hub.workers || hub.hashrate != null)) ? hub : (cached || hub || {});
         const ident = cached ? tipIdentity(cached, { emissionBook: false }) : {};
         ok(200, {
           ...book,
@@ -360,13 +368,23 @@ export function startJoinNode(opts = {}) {
   }
   const soloHost = cfg.announceHost || loadOrCreateSoloHost(cfg.dataDir);
   const solo = startSoloAnnounceLoop(
-    () => ({
-      host: soloHost,
-      port: cfg.listenStratum || 1474,
-      role: cfg.role || 'join',
-      version: cfg.version || '',
-      threads: 0,
-    }),
+    () => {
+      const cached = getReplicaBook() || {};
+      const workers = Array.isArray(cached.workers) ? cached.workers : [];
+      const hon = rollupMinerWorkers('join', workers);
+      return {
+        host: soloHost,
+        port: cfg.listenStratum || 1474,
+        role: cfg.role || 'join',
+        version: cfg.version || '',
+        threads: hon.threads,
+        accepted: hon.accepted,
+        hashrate: hon.hashrate,
+        cpuCores: hon.cpuCores,
+        cpuThreads: hon.cpuThreads,
+        threadHonesty: hon.threadHonesty,
+      };
+    },
     { announceUrl: cfg.announceUrl, fetchImpl: opts.fetchImpl },
   );
   const report = createSyncReporter(printer);

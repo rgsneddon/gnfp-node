@@ -56,6 +56,14 @@ export function sanitizeNodeVersion(raw) {
   return s;
 }
 
+const THREAD_HONESTY = new Set(['honest', 'inflate', 'underreport', 'unknown']);
+
+function clampThreads(raw) {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(256, n);
+}
+
 export function buildSoloAnnounceBody({
   host,
   port = 1474,
@@ -65,18 +73,24 @@ export function buildSoloAnnounceBody({
   threads = 0,
   accepted = 0,
   label = '',
+  cpuCores = 0,
+  cpuThreads = 0,
+  threadHonesty = '',
 } = {}) {
   const allowed = new Set(['join', 'pool', 'solo', 'front', 'book', 'exchange']);
   const r = allowed.has(String(role || '').toLowerCase()) ? String(role).toLowerCase() : 'join';
-  const th = Math.floor(Number(threads));
+  const honesty = String(threadHonesty || '').toLowerCase();
   return {
     host: String(host || '').trim().toLowerCase(),
     port: Math.max(1, Math.min(65535, Math.floor(Number(port) || 1474))),
     role: r,
     version: sanitizeNodeVersion(version),
     hashrate: Math.max(0, Number(hashrate) || 0),
-    threads: Number.isFinite(th) && th >= 0 ? Math.min(256, th) : 0,
+    threads: clampThreads(threads),
     accepted: Math.max(0, Math.floor(Number(accepted) || 0)),
+    cpuCores: clampThreads(cpuCores),
+    cpuThreads: clampThreads(cpuThreads),
+    threadHonesty: THREAD_HONESTY.has(honesty) ? honesty : 'unknown',
     label: r === 'solo' ? 'solo' : String(label || r).slice(0, 40),
   };
 }

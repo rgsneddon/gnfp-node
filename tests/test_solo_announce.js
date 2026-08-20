@@ -33,6 +33,9 @@ test('solo announce body is role=solo and posts to explorer + book', async () =>
   assert.equal(body.host, 'solo-deadbeef.node');
   assert.equal(body.threads, 1);
   assert.equal(body.version, '1.1.8');
+  assert.equal(body.cpuCores, 0);
+  assert.equal(body.cpuThreads, 0);
+  assert.equal(body.threadHonesty, 'unknown');
   const urls = announceUrls();
   assert.ok(urls.some((u) => u.includes('explorer.restoreprivacy.online')));
   assert.ok(urls.some((u) => u.includes('de.restoreprivacy.online:1474')));
