@@ -1,9 +1,7 @@
 # Windows pointer — gnfp-node 1.2.5
 
-Windows-machine leftover lives in:
+**Do not use this file as the pin list.** All GNFP client releases (wallet, miner, node) live in one place:
 
 **https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md**
 
-Build/upload `gnfp-node-1.2.5-windows.zip` to https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.5 if a PE layout is needed. This Mac ships Node 18+ source packs (unix + `pack/win/gnfp-node.cmd`).
-
-Pin: **1.2.5**. Admit floor **GNFPHash 1.0.4** (`src/miner_admit.js`). 1.0.3 and lower commit zero work. Join/equal/solo publish the same honesty architecture as the Germany book: utilised threads vs device `cpuCores`/`cpuThreads`, proven-hash H/s (not share/s).
+Current pin here: **1.2.5**. Source packs are on the tag. Laptop leftover: optional PE zip.
