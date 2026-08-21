@@ -47,6 +47,8 @@ test('lone node settles a miner share and keeps the tip after restart', () => {
     proven,
   );
   assert.equal(hashMatches(got.sealed), true);
+  assert.equal(got.sealed.difficultyBits, 14);
+  assert.equal(got.sealed.difficulty, 2 ** 14);
   const hash = a.tip().tipHash;
   const b = createEqualBook({ dataDir: dir, bits: 14 });
   assert.equal(b.tip().height, 1);

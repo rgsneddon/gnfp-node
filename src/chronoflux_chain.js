@@ -7,7 +7,7 @@
  * adds previousHash + hash so later rewrites can be rejected.
  */
 import { createHash } from 'crypto';
-import { sealedRoundAgrees } from './book_law.js';
+import { LIVE_MIN_DIFFICULTY_BITS, sealedRoundAgrees } from './book_law.js';
 
 export const GENESIS_PREV = '0'.repeat(64);
 export const CONFIRMATION_MS = 72_000;
@@ -57,6 +57,9 @@ export function canonicalBlockPayload(block) {
   // their stored hash still matches.
   if (block?.difficulty != null && block.difficulty !== '') {
     body.difficulty = Number(block.difficulty);
+  }
+  if (block?.difficultyBits != null && block.difficultyBits !== '') {
+    body.difficultyBits = Number(block.difficultyBits);
   }
   if (block?.blockRewardGnfp != null && block.blockRewardGnfp !== '') {
     body.blockRewardGnfp = Number(block.blockRewardGnfp);
@@ -226,13 +229,19 @@ export function sameSealedTip(localBlocks, remoteBlocks) {
   return tipHashOf(localBlocks) === tipHashOf(remoteBlocks);
 }
 
-/** Proven work of one sealed block. Missing difficulty counts as 1 so length is most-work for equal-bits books. */
+/**
+ * Proven work of one sealed block, in bookLawOnTip units (2**bits).
+ * Missing difficulty (live IBD) uses live-min bits so it is commensurate
+ * with locally formed blocks. Legacy equal-book seals stored a bit count
+ * (1..32) in `difficulty`; those are bits, not work.
+ */
 export function blockWork(block) {
-  const d = Number(block?.difficulty);
-  if (Number.isFinite(d) && d > 0) return d;
   const bits = Number(block?.difficultyBits);
-  if (Number.isFinite(bits) && bits >= 0 && bits <= 63) return 2 ** bits;
-  return 1;
+  if (Number.isFinite(bits) && bits >= 0 && bits <= 32) return 2 ** bits;
+  const d = Number(block?.difficulty);
+  if (Number.isFinite(d) && d > 32) return d;
+  if (Number.isFinite(d) && d >= 1 && d <= 32) return 2 ** d;
+  return 2 ** LIVE_MIN_DIFFICULTY_BITS;
 }
 
 export function chainWork(blocks) {

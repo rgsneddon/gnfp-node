@@ -137,6 +137,18 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   const minerNanos = Object.create(null);
   let lastFormedAt = 0;
   let lastBlockBits = GENESIS_DIFFICULTY_BITS;
+  if (blocks.length) {
+    const last = blocks[blocks.length - 1];
+    const storedBits = Number(last?.difficultyBits);
+    const storedDiff = Number(last?.difficulty);
+    if (Number.isFinite(storedBits) && storedBits >= 1 && storedBits <= 32) {
+      lastBlockBits = storedBits;
+    } else if (Number.isFinite(storedDiff) && storedDiff > 32) {
+      lastBlockBits = Math.max(1, Math.min(32, Math.round(Math.log2(storedDiff))));
+    } else if (Number.isFinite(storedDiff) && storedDiff >= 1 && storedDiff <= 32) {
+      lastBlockBits = storedDiff;
+    }
+  }
 
   function minerRec(username) {
     const key = String(username || '').trim();
@@ -395,7 +407,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             height: nextHeight,
           },
         ],
-        difficulty: needBits,
+        difficulty: 2 ** needBits,
+        difficultyBits: needBits,
         foundAt: Date.now(),
         from: 'coinbase',
         to: 'miners',

@@ -5,13 +5,20 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import {
   adoptReplicaBook,
+  blockWork,
   chainWork,
   commonPrefixLength,
   ensureSealedChain,
   GNFP_BOOK,
   shouldAdoptRemote,
 } from '../src/chronoflux_chain.js';
-import { HASH_TX_LIVE, collateHashCommits, hashCommitTx, hashWindowCommitment } from '../src/book_law.js';
+import {
+  HASH_TX_LIVE,
+  LIVE_MIN_DIFFICULTY_BITS,
+  collateHashCommits,
+  hashCommitTx,
+  hashWindowCommitment,
+} from '../src/book_law.js';
 import { reconstructSpendable, stampLedgerTx, txsFromSealedBlocks } from '../src/gnfp_height_ledger.js';
 import { parseNodeArgs, VERSION } from '../src/node.js';
 
@@ -175,4 +182,58 @@ test('nakamoto: 1-hash=1-tx stays off but collate architecture remains', () => {
   assert.equal(collated[0].hashes, 10);
   const root = hashWindowCommitment({ gnfp1alice: 10 });
   assert.equal(root.length, 64);
+});
+
+test('nakamoto: mixed live-style vs equal-book difficulty uses commensurate work', () => {
+  const live = ensureSealedChain(
+    Array.from({ length: 4 }, (_, i) => ({
+      height: i + 1, jobId: `live${i}`, miner: 'ibd', amount: 1, foundAt: i,
+    })),
+  );
+  const bitCount = ensureSealedChain(
+    Array.from({ length: 3 }, (_, i) => ({
+      height: i + 1, jobId: `bits${i}`, miner: 'local', amount: 1, foundAt: i,
+      difficulty: LIVE_MIN_DIFFICULTY_BITS,
+    })),
+  );
+  const workUnits = ensureSealedChain(
+    Array.from({ length: 3 }, (_, i) => ({
+      height: i + 1, jobId: `work${i}`, miner: 'pow', amount: 1, foundAt: i,
+      difficulty: 2 ** LIVE_MIN_DIFFICULTY_BITS,
+      difficultyBits: LIVE_MIN_DIFFICULTY_BITS,
+    })),
+  );
+  const minWork = 2 ** LIVE_MIN_DIFFICULTY_BITS;
+  assert.equal(blockWork(live[0]), minWork);
+  assert.equal(blockWork(bitCount[0]), minWork);
+  assert.equal(blockWork(workUnits[0]), minWork);
+  assert.equal(chainWork(live) > chainWork(bitCount), true);
+  assert.equal(shouldAdoptRemote(live, bitCount), false);
+  const kept = adoptReplicaBook(
+    { blocks: live, book: GNFP_BOOK.id, coin: 'GNFP' },
+    { blocks: bitCount, book: GNFP_BOOK.id, coin: 'GNFP' },
+  );
+  assert.equal(kept.ok, true);
+  assert.equal(kept.firstSeen, true);
+  assert.equal(kept.book.blocks.length, 4);
+  assert.equal(chainWork(live) > chainWork(workUnits), true);
+  assert.equal(shouldAdoptRemote(live, workUnits), false);
+  const highBits = LIVE_MIN_DIFFICULTY_BITS + 2;
+  const heavier = ensureSealedChain(
+    Array.from({ length: 3 }, (_, i) => ({
+      height: i + 1, jobId: `hi${i}`, miner: 'hi', amount: 1, foundAt: i,
+      difficulty: 2 ** highBits,
+      difficultyBits: highBits,
+    })),
+  );
+  assert.equal(blockWork(heavier[0]), 2 ** highBits);
+  assert.equal(chainWork(heavier) > chainWork(live), true);
+  assert.equal(shouldAdoptRemote(live, heavier), true);
+  const adopted = adoptReplicaBook(
+    { blocks: live, book: GNFP_BOOK.id, coin: 'GNFP' },
+    { blocks: heavier, book: GNFP_BOOK.id, coin: 'GNFP' },
+  );
+  assert.equal(adopted.ok, true);
+  assert.equal(adopted.reorg || adopted.extended, true);
+  assert.equal(adopted.book.blocks.at(-1).hash, heavier.at(-1).hash);
 });
