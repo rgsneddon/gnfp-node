@@ -43,7 +43,7 @@ shasum -a 256 gnfp-node-1.2.6-macos.tar.gz
 # must match SHA256SUMS
 ```
 
-Windows leftover (native PE layout, if someone still needs it): [WINDOWS_HANDOFF_1.2.6.md](./WINDOWS_HANDOFF_1.2.6.md) and https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md
+Windows leftover (optional native PE; source zip on the tag is enough): https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md (`WINDOWS_HANDOFF.md` in this repo is a pointer).
 
 ---
 
