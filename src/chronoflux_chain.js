@@ -7,6 +7,7 @@
  * adds previousHash + hash so later rewrites can be rejected.
  */
 import { createHash } from 'crypto';
+import { sealedRoundAgrees } from './book_law.js';
 
 export const GENESIS_PREV = '0'.repeat(64);
 export const CONFIRMATION_MS = 72_000;
@@ -63,6 +64,12 @@ export function canonicalBlockPayload(block) {
   if (block?.hashBonusGnfp != null && block.hashBonusGnfp !== '') {
     body.hashBonusGnfp = Number(block.hashBonusGnfp);
   }
+  if (block?.creditsNanos && typeof block.creditsNanos === 'object') {
+    body.creditsNanos = block.creditsNanos;
+  }
+  if (block?.hashWindowCommitment) {
+    body.hashWindowCommitment = String(block.hashWindowCommitment);
+  }
   return JSON.stringify(body);
 }
 
@@ -94,10 +101,20 @@ export function hashBlockLegacy(block) {
   return createHash('sha256').update(legacyCanonicalPayload(block)).digest('hex');
 }
 
+function withoutRoundLaw(block) {
+  const next = { ...block };
+  delete next.creditsNanos;
+  delete next.hashWindowCommitment;
+  delete next.bonusNanos;
+  delete next.potSplits;
+  return next;
+}
+
 export function hashMatches(block) {
   const got = String(block?.hash || '');
   if (!got) return false;
-  return got === hashBlock(block) || got === hashBlockLegacy(block);
+  if (got === hashBlock(block) || got === hashBlockLegacy(block)) return true;
+  return got === hashBlock(withoutRoundLaw(block));
 }
 
 export function isSealedBlock(block) {
@@ -269,6 +286,11 @@ export function adoptReplicaBook(local, remote) {
   const remoteGot = sealedRemoteOrReject(remoteChain);
   if (!remoteGot.ok) return remoteGot;
   const remoteSealed = remoteGot.blocks;
+  for (const b of remoteSealed) {
+    if ((b?.bonusNanos || b?.creditsNanos) && !sealedRoundAgrees(b)) {
+      return { ok: false, reason: 'round_mismatch' };
+    }
+  }
   const localSealed = localChain.length && localChain.every(isSealedBlock)
     ? localChain.map((b) => ({ ...b }))
     : (localChain.length ? ensureSealedChain(localChain) : []);

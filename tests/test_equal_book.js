@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import { GNFP_BOOK, hashMatches } from '../src/chronoflux_chain.js';
+import { GNFP_BOOK, hashMatches, hashBlock, adoptReplicaBook } from '../src/chronoflux_chain.js';
 import { hashMeetsJob } from '../src/cpu_pow.js';
 import { createEqualBook } from '../src/equal_book.js';
 import os from 'os';
-import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, hashBonusGnfp, hashesProvenByShare } from '../src/book_law.js';
+import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, hashBonusGnfp, hashesProvenByShare, sealedRoundAgrees } from '../src/book_law.js';
 
 function scratchDir() {
   const dir = path.join(os.tmpdir(), `equal-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -181,6 +181,39 @@ test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
   assert.equal(book.minerNanos()['gnfp1carol.worker'], proven + pot);
   assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'hash' && t.confirmed === true));
   assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'mine'));
+  const round = (got.sealed.transactions || []).find(
+    (t) => t.kind === 'mine' && t.to === 'gnfp1carol.worker' && t.confirmed === true,
+  );
+  assert.ok(round, 'bonus+pot round row must be sealed');
+  assert.equal(round.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(proven));
+  assert.equal(round.hashes, proven);
+  assert.equal(got.sealed.hashBonusGnfp, HASH_BONUS_GNFP);
+  assert.equal(sealedRoundAgrees(got.sealed), true);
+});
+
+test('join rejects a tip whose creditsNanos do not match the collated window', () => {
+  const book = createEqualBook({ bits: 14 });
+  const job = book.nextJob();
+  const nonce = findNonce(job);
+  const got = book.submitShare({
+    username: 'gnfp1eve.worker',
+    nonce,
+    jobId: job.jobId,
+    client: 'GNFPHash',
+    version: '1.0.4',
+  });
+  assert.equal(got.accepted, true, got.reason);
+  const honest = got.sealed;
+  const ok = adoptReplicaBook({}, { blocks: [honest], book: GNFP_BOOK.id, coin: 'GNFP' });
+  assert.equal(ok.ok, true, ok.reason);
+  const lie = {
+    ...honest,
+    creditsNanos: { 'gnfp1eve.worker': 9_000_000_000_000 },
+  };
+  lie.hash = hashBlock(lie);
+  const rejected = adoptReplicaBook({}, { blocks: [lie], book: GNFP_BOOK.id, coin: 'GNFP' });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.reason, 'round_mismatch');
 });
 
 test('GNFPHash 1.0.3 and lower commit zero work on the equal book', () => {

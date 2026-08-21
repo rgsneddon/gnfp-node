@@ -2,7 +2,7 @@
 
 Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live node. Germany and Singapore are well-known peers, not masters.
 
-**Pin:** `1.2.5`  
+**Pin:** `1.2.6`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused  
@@ -14,12 +14,12 @@ Proven hashes accumulate on **one in-memory path per recipient wallet**. They ar
 
 | Part | Pin | How-to |
 |---|---|---|
-| This node | **1.2.5** | [Releases and packages](#releases-and-packages) · [Join](#how-to-join-the-live-node-default) · [Equal / solo](#how-to-run-an-equal--solo-node) |
+| This node | **1.2.6** | [Releases and packages](#releases-and-packages) · [Join](#how-to-join-the-live-node-default) · [Equal / solo](#how-to-run-an-equal--solo-node) |
 | Miner **GNFPHash** | **1.0.5** | [Point a miner at this node](#how-to-point-gnfphash-105-at-this-node) · https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.5 |
-| Wallet | **0.1.6** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.6 |
+| Wallet | **0.1.8** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.8 |
 | Pool | live | https://gnfp.restoreprivacy.online |
 | Explorer | live | https://explorer.restoreprivacy.online |
-| GitHub node release | **v1.2.5** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.5 |
+| GitHub node release | **v1.2.6** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6 |
 
 Admit floor: **GNFPHash 1.0.4 and above**. 1.0.3 and lower commit **zero work**. Prefer **1.0.5** (device `cpuCores` / `cpuThreads` plus utilised threads).
 
@@ -27,35 +27,35 @@ Admit floor: **GNFPHash 1.0.4 and above**. 1.0.3 and lower commit **zero work**.
 
 ## Releases and packages
 
-Every GitHub **v1.2.5** asset is the same Node 18+ source tree (unix launcher + Windows `.cmd`). There is no native PE / `.app` in this pin. Pick one archive, verify the checksum, unpack, run.
+Every GitHub **v1.2.6** asset is the same Node 18+ source tree (unix launcher + Windows `.cmd`). There is no native PE / `.app` in this pin. Pick one archive, verify the checksum, unpack, run.
 
 | Package | File | For |
 |---|---|---|
-| macOS | `gnfp-node-1.2.5-macos.tar.gz` | macOS with Node.js 18+ |
-| Linux | `gnfp-node-1.2.5-linux.tar.gz` | Linux / Arch with Node.js 18+ |
-| Windows | `gnfp-node-1.2.5-windows.zip` | Windows with Node.js 18+ (`pack\win\gnfp-node.cmd`) |
+| macOS | `gnfp-node-1.2.6-macos.tar.gz` | macOS with Node.js 18+ |
+| Linux | `gnfp-node-1.2.6-linux.tar.gz` | Linux / Arch with Node.js 18+ |
+| Windows | `gnfp-node-1.2.6-windows.zip` | Windows with Node.js 18+ (`pack\win\gnfp-node.cmd`) |
 
 Checksums: `SHA256SUMS` next to the assets, or the release notes.
 
 ```bash
 # example (macOS / Linux)
-shasum -a 256 gnfp-node-1.2.5-macos.tar.gz
+shasum -a 256 gnfp-node-1.2.6-macos.tar.gz
 # must match SHA256SUMS
 ```
 
-Windows leftover (native PE layout, if someone still needs it): [WINDOWS_HANDOFF_1.2.5.md](./WINDOWS_HANDOFF_1.2.5.md) and https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md
+Windows leftover (native PE layout, if someone still needs it): [WINDOWS_HANDOFF_1.2.6.md](./WINDOWS_HANDOFF_1.2.6.md) and https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md
 
 ---
 
 ## How-to: macOS package
 
 1. Install **Node.js 18+** (`node -v`).
-2. Download `gnfp-node-1.2.5-macos.tar.gz` from the [v1.2.5 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.5).
+2. Download `gnfp-node-1.2.6-macos.tar.gz` from the [v1.2.6 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6).
 3. Unpack and start **join** (default):
 
 ```bash
-tar xzf gnfp-node-1.2.5-macos.tar.gz
-cd gnfp-node-1.2.5
+tar xzf gnfp-node-1.2.6-macos.tar.gz
+cd gnfp-node-1.2.6
 ./pack/unix/gnfp-node
 ```
 
@@ -74,12 +74,12 @@ curl -sS http://127.0.0.1:8014/api/tip
 ## How-to: Linux package
 
 1. Install **Node.js 18+** (`node -v`).
-2. Download `gnfp-node-1.2.5-linux.tar.gz` from the [v1.2.5 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.5).
+2. Download `gnfp-node-1.2.6-linux.tar.gz` from the [v1.2.6 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6).
 3. Unpack and start join:
 
 ```bash
-tar xzf gnfp-node-1.2.5-linux.tar.gz
-cd gnfp-node-1.2.5
+tar xzf gnfp-node-1.2.6-linux.tar.gz
+cd gnfp-node-1.2.6
 ./pack/unix/gnfp-node
 ```
 
@@ -96,11 +96,11 @@ Public stratum needs TLS certs (`--tls-cert` / `--tls-key` or `GNFP_TLS_CERT` / 
 ## How-to: Windows package
 
 1. Install **Node.js 18+** from https://nodejs.org and confirm `node -v` in `cmd`.
-2. Download `gnfp-node-1.2.5-windows.zip` from the [v1.2.5 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.5).
+2. Download `gnfp-node-1.2.6-windows.zip` from the [v1.2.6 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6).
 3. Unzip and start join:
 
 ```bat
-cd gnfp-node-1.2.5
+cd gnfp-node-1.2.6
 pack\win\gnfp-node.cmd
 ```
 
@@ -114,7 +114,7 @@ pack\win\gnfp-node.cmd --print-config
 curl -sS http://127.0.0.1:8014/api/tip
 ```
 
-This zip is **source + cmd**, not a native `.exe`. A PE rebuild, if required, is the Windows leftover — do not expect a sibling `v1.2.5-windows` tag.
+This zip is **source + cmd**, not a native `.exe`. A PE rebuild, if required, is the Windows leftover — do not expect a sibling `v1.2.6-windows` tag.
 
 ---
 
@@ -123,7 +123,7 @@ This zip is **source + cmd**, not a native `.exe`. A PE rebuild, if required, is
 ```bash
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-git checkout v1.2.5
+git checkout v1.2.6
 node src/node.js
 ```
 
@@ -132,11 +132,11 @@ Windows:
 ```bat
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-git checkout v1.2.5
+git checkout v1.2.6
 node src\node.js
 ```
 
-`--print-config` JSON `version` must be `1.2.5`.
+`--print-config` JSON `version` must be `1.2.6`.
 
 ---
 
@@ -251,7 +251,7 @@ node src/node.js help mine
 node src/node.js help data
 ```
 
-`--print-config` must show `"version": "1.2.5"`, `"join": true` (unless you passed `--equal`), `"tls": true` unless `--notls`.
+`--print-config` must show `"version": "1.2.6"`, `"join": true` (unless you passed `--equal`), `"tls": true` unless `--notls`.
 
 ```bash
 curl -sS http://127.0.0.1:8014/api/tip
@@ -278,7 +278,7 @@ curl -sS http://127.0.0.1:8014/api/miner/miner-TAG
 
 ---
 
-## Honesty (1.2.5)
+## Honesty (1.2.6)
 
 Join, equal, and solo use the **same** rules as the Germany book:
 

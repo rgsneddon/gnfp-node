@@ -30,18 +30,23 @@ import {
   HASH_COMMIT_ON_ACCEPT,
   HASH_TX_COLLATE,
   HASH_TX_CONFIRM_ON_BLOCK,
+  HASH_TX_LIVE,
   USER_TX_CONFIRM_ON_BLOCK,
   MINER_MINT_ONLY,
   isMintKind,
   hashCommitTx,
   collateHashCommits,
   bundleHashTxsForBlock,
+  confirmedRoundRowsFromHashes,
+  hashWindowCommitment,
+  isOwnerHistoryTx,
   confirmUserTxs,
   blockFormWalletNanos,
   networkDifficulty,
   noteMinerHashes,
   retargetBits,
   settleWindowCredits,
+  sealedRoundAgrees,
 } from '../src/book_law.js';
 import { tipIdentity } from '../src/book_pull.js';
 import { hashBlock, hashMatches, sealBlock } from '../src/chronoflux_chain.js';
@@ -109,6 +114,39 @@ test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
   assert.equal(tip.genesisDifficultyBits, 21);
   assert.equal(tip.blockIntervalMs, 90_000);
   assert.equal(tip.hashBonusGnfp, 1e-9);
+  assert.equal(HASH_TX_LIVE, 0);
+  assert.equal(tip.hashTxLive, 0);
+  const n = 12;
+  const future = confirmedRoundRowsFromHashes({ alice: n, bob: 4 }, { height: 50 });
+  assert.equal(future.rows.length, 2);
+  assert.ok(future.rows.every((t) => t.confirmed === true && t.height === 50 && t.kind === 'mine'));
+  const aliceRow = future.rows.find((t) => t.to === 'alice');
+  assert.equal(aliceRow.hashes, n);
+  assert.equal(aliceRow.bonusAmount, n / NANOS_PER_GNFP);
+  assert.equal(aliceRow.amount, future.settled.totalsNanos.alice / NANOS_PER_GNFP);
+  assert.equal(aliceRow.amount, aliceRow.potAmount + aliceRow.bonusAmount);
+  const manyHash = [];
+  for (let i = 0; i < 5000; i += 1) {
+    manyHash.push(hashCommitTx({ to: i < 10 ? `m${i}` : 'alice', hashes: 3, jobId: `x${i}` }));
+  }
+  assert.equal(collateHashCommits(manyHash).length, 11);
+  assert.equal(
+    isOwnerHistoryTx({ kind: 'hash', confirmed: false, to: 'alice', from: 'coinbase' }, 'alice'),
+    false,
+  );
+  assert.equal(
+    isOwnerHistoryTx({ kind: 'mine', confirmed: true, to: 'alice', from: 'coinbase' }, 'alice'),
+    true,
+  );
+  const win = { alice: n, bob: 4 };
+  assert.equal(hashWindowCommitment(win), hashWindowCommitment({ bob: 4, alice: n }));
+  assert.equal(hashWindowCommitment(win).length, 64);
+  const closed = settleWindowCredits(win);
+  assert.equal(sealedRoundAgrees({
+    amount: sealedCoinbaseGnfp(win),
+    bonusNanos: closed.bonusNanos,
+    creditsNanos: closed.totalsNanos,
+  }), true);
 });
 
 test('public tx preview shows amounts and never leaks wallets or IPs', () => {

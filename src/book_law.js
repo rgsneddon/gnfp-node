@@ -107,6 +107,18 @@ export const USER_TX_KIND = 'send';
 export const BLOCK_POT_TX_KIND = 'mine';
 /** Only proven miner work mints. Sends move existing GNFP. Not a flag. Not env. */
 export const MINER_MINT_ONLY = 1;
+/**
+ * 0 = do not persist one open-window object per hash (lean collate).
+ * Block-found bonus is still sealed into consensus (transactions +
+ * hashBonusGnfp on the block). Flip to 1 only at a later coordinated
+ * hard fork (may be years away) to require per-hash network commit
+ * of every open-window unit before collate.
+ *
+ * Mint law: 1 GNFP pot per formed block, split by in-window work,
+ * plus 0.000000001 GNFP per proven hash to that miner. Not 1 GNFP per miner.
+ * Paper: https://zenodo.org/records/22037205
+ */
+export const HASH_TX_LIVE = 0;
 export function bookLawFingerprint() {
   return [
     BOOK_LAW_ID,
@@ -321,6 +333,98 @@ export function bundleHashTxsForBlock(commits, height = 0) {
   return confirmHashTxs(collateHashCommits(commits), height);
 }
 
+/**
+ * Chronoflux continuity commitment of an open hash window.
+ * Framework (https://grokipedia.com/page/Chronoflux_framework):
+ *   ∇_μ(ρ_t u^μ)=0,  J^μ=ρ_t u^μ,  Q=∫ρ_t dV
+ * Each proven hash is a discrete ρ_t sample (HASH_BONUS_NANOS). This
+ * root commits collated Q without one JSON object per sample. Block
+ * found is G_{μν}=8π(T^{mat}+T^{cf}) closure with
+ * T^{cf}_{μν}=(ρ_t+p_t)u_μ u_ν+p_t g_{μν}; the window may then be
+ * pruned (hydrodynamic well-posedness: κ,λ,η,ζ>0 — naive per-hash
+ * objects are unbounded shear). Same family as flow-cloak continuity
+ * root and PERC 1e8 microblocks → one main seal.
+ * Not in the live block hash until the later HASH_TX_LIVE cutover.
+ * Sneddon 2026, https://zenodo.org/records/22037205
+ */
+export function hashWindowCommitment(hashCounts = {}) {
+  const parts = Object.entries(hashCounts || {})
+    .map(([k, v]) => `${String(k)}:${Math.max(0, Math.floor(Number(v) || 0))}`)
+    .filter((row) => !row.endsWith(':0'))
+    .sort();
+  return createHash('sha256').update(`hash-window:v1:${parts.join('|')}`).digest('hex');
+}
+
+/**
+ * One owner-visible confirmed movement after a tip: pot-share + hash bonus.
+ * Used by the live wallet explorer now (any units) and by the future 1e-9 path.
+ */
+export function ownerRoundRow({
+  to,
+  amount,
+  hashes = 0,
+  height = 0,
+  at,
+  potAmount,
+  bonusAmount,
+} = {}) {
+  const h = Number(height) || 0;
+  const dest = String(to || '');
+  const tag = createHash('sha256').update(`round:${dest}:${h}`).digest('hex').slice(0, 12);
+  return {
+    id: `round-${h}-${tag}`,
+    kind: BLOCK_POT_TX_KIND,
+    asset: 'GNFP',
+    from: 'coinbase',
+    to: dest,
+    amount: Number(amount) || 0,
+    hashes: Math.max(0, Math.floor(Number(hashes) || 0)),
+    confirmed: true,
+    height: h,
+    at: Number(at) || undefined,
+    potAmount: Number(potAmount) || 0,
+    bonusAmount: Number(bonusAmount) || 0,
+  };
+}
+
+/**
+ * Future 1-hash=1-tx seal: one confirmed row per miner whose amount is
+ * (share of 1 GNFP pot) + (hashes × 0.000000001). O(miners), not O(hashes).
+ * Not applied by the live DE pool while HASH_TX_LIVE is 0.
+ */
+export function confirmedRoundRowsFromHashes(hashCounts, {
+  potNanos = BLOCK_REWARD_NANOS,
+  height = 0,
+  at,
+} = {}) {
+  const counts = hashCounts && typeof hashCounts === 'object' ? hashCounts : {};
+  const settled = settleWindowCredits(counts, { potNanos });
+  const rows = [];
+  for (const [to, total] of Object.entries(settled.totalsNanos || {})) {
+    const hashes = Math.max(0, Math.floor(Number(counts[to]) || 0));
+    rows.push(ownerRoundRow({
+      to,
+      amount: (Number(total) || 0) / NANOS_PER_GNFP,
+      hashes,
+      height,
+      at,
+      potAmount: (settled.potSplits[to] || 0) / NANOS_PER_GNFP,
+      bonusAmount: (settled.bonusNanos[to] || 0) / NANOS_PER_GNFP,
+    }));
+  }
+  return { settled, rows };
+}
+
+/** Owner explorer/history: skip unconfirmed hash micros; keep legacy rows. */
+export function isOwnerHistoryTx(tx, address) {
+  const addr = String(address || '').trim();
+  if (!tx || !addr) return false;
+  if (String(tx.from || '') !== addr && String(tx.to || '') !== addr) return false;
+  if (String(tx.kind || '') === HASH_TX_KIND && tx.confirmed !== true) return false;
+  if (tx.confirmed === false) return false;
+  return true;
+}
+
 /** Wallet send/receive rows confirm only when miner work forms the block. */
 export function confirmUserTxs(txs = [], height = 0) {
   const h = Number(height) || 0;
@@ -409,6 +513,29 @@ export function settleWindowCredits(hashCounts, { potNanos = BLOCK_REWARD_NANOS 
   };
 }
 
+/**
+ * Join/equal-book check: sealed creditsNanos match settleWindowCredits
+ * of the collated bonus window, and amount is 1 GNFP + 1e-9 per hash.
+ */
+export function sealedRoundAgrees(block) {
+  const bonus = block?.bonusNanos && typeof block.bonusNanos === 'object' ? block.bonusNanos : {};
+  const hashes = {};
+  for (const [k, n] of Object.entries(bonus)) {
+    hashes[k] = Math.max(0, Math.floor(Number(n) || 0));
+  }
+  const settled = settleWindowCredits(hashes);
+  for (const [k, want] of Object.entries(settled.totalsNanos || {})) {
+    const got = Math.max(0, Math.floor(Number(block?.creditsNanos?.[k]) || 0));
+    if (got !== want) return false;
+  }
+  const amt = Number(block?.amount);
+  if (Number.isFinite(amt)) {
+    const coinbase = sealedCoinbaseNanos(hashes);
+    if (Math.abs(amt * NANOS_PER_GNFP - coinbase) > 1) return false;
+  }
+  return true;
+}
+
 /** Fields every tip / stats / --print-config payload should carry. */
 export function bookLawOnTip({
   bits,
@@ -440,5 +567,6 @@ export function bookLawOnTip({
     userTxConfirmOnBlock: USER_TX_CONFIRM_ON_BLOCK,
     minerMintOnly: MINER_MINT_ONLY,
     hashTxKind: HASH_TX_KIND,
+    hashTxLive: HASH_TX_LIVE,
   };
 }

@@ -25,6 +25,9 @@ import {
   NANOS_PER_GNFP,
   hashCommitTx,
   bundleHashTxsForBlock,
+  confirmedRoundRowsFromHashes,
+  sealedRoundAgrees,
+  hashWindowCommitment,
   blockFormWalletNanos,
 } from './book_law.js';
 import { hashMeetsJob, gnfpWorkHash, meetsTarget } from './cpu_pow.js';
@@ -325,6 +328,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     const proven = hashesProvenByShare(shareBits);
     hashWindow = noteMinerHashes(hashWindow, miner, proven);
     acceptedCount += 1;
+    // Future 1-hash=1-tx unit (collated in-memory). Live DE pool still
+    // HASH_TX_LIVE=0 until a coordinated hard fork.
     const hashTx = hashCommitTx({
       to: miner,
       hashes: proven,
@@ -362,6 +367,7 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       })),
       nextHeight,
     );
+    const roundRows = confirmedRoundRowsFromHashes(settled.bonusNanos || {}, { height: nextHeight }).rows;
     const prev = blocks.length ? blocks[blocks.length - 1].hash : undefined;
     const sealed = sealBlock(
       {
@@ -374,8 +380,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
         creditsNanos: settled.totalsNanos,
         bonusNanos: settled.bonusNanos,
         potSplits: settled.potSplits,
+        hashWindowCommitment: hashWindowCommitment(settled.bonusNanos || {}),
         transactions: [
           ...hashTxs.map((t) => ({ ...t, confirmed: true, height: nextHeight })),
+          ...roundRows,
           {
             id: `block-${nextHeight}`,
             kind: 'mine',
@@ -383,6 +391,8 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
             to: 'miners',
             amount: BLOCK_REWARD_GNFP + bonusTotalNanos / NANOS_PER_GNFP,
             asset: GNFP_BOOK.coin,
+            confirmed: true,
+            height: nextHeight,
           },
         ],
         difficulty: needBits,
@@ -393,6 +403,9 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
       prev,
       blocks.length,
     );
+    if (!sealedRoundAgrees(sealed)) {
+      return { accepted: false, reason: 'round_mismatch', asset: GNFP_BOOK.coin };
+    }
     blocks.push(sealed);
     height = nextHeight;
     lastBlockBits = needBits;
