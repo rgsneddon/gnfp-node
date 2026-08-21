@@ -1,12 +1,13 @@
 # gnfp-node
 
-Run **your own $GNFP node**. Same chain as everyone else. Join is **on from launch**: local stratum relays miners into the live node. Germany and Singapore are well-known peers, not masters.
+Run **your own $GNFP node**. Same chain as everyone else. Default is an **equal daemon**: local stratum is this book. Germany and Singapore are well-known **peers**, not masters. `--join` is opt-in relay.
 
-**Pin:** `1.2.6`  
+**Pin:** `1.2.7`  
 **Coin:** GNFP  
-**Chain:** `gnfp-germany-book-v1` (immutable)  
+**Chain:** `gnfp-germany-book-v1` (immutable id; competing suffixes resolve by most-work)  
 **Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused  
-**Needs:** Node.js **18+** on the PATH. No `npm install`.
+**Needs:** Node.js **18+** on the PATH. No `npm install`.  
+**`HASH_TX_LIVE`:** `0` (1-hash=1-tx is not enacted; collate path stays in book law for a later fork).
 
 Only **miners** mint. A wallet send never creates GNFP. Time never forms a block.
 
@@ -14,12 +15,12 @@ Proven hashes accumulate on **one in-memory path per recipient wallet**. They ar
 
 | Part | Pin | How-to |
 |---|---|---|
-| This node | **1.2.6** | [Releases and packages](#releases-and-packages) · [Join](#how-to-join-the-live-node-default) · [Equal / solo](#how-to-run-an-equal--solo-node) |
-| Miner **GNFPHash** | **1.0.5** | [Point a miner at this node](#how-to-point-gnfphash-105-at-this-node) · https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.5 |
-| Wallet | **0.1.8** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.8 |
+| This node | **1.2.7** | [Releases and packages](#releases-and-packages) · [Equal daemon](#how-to-run-the-equal-daemon-default) · [Join relay](#how-to-join-relay-opt-in) |
+| Miner **GNFPHash** | **1.0.6** | [Point a miner at this node](#how-to-point-gnfphash-106-at-this-node) · https://github.com/rgsneddon/GNFPHash/releases/tag/v1.0.6 |
+| Wallet | **0.1.9** | https://github.com/rgsneddon/gnfp-wallet/releases/tag/v0.1.9 |
 | Pool | live | https://gnfp.restoreprivacy.online |
 | Explorer | live | https://explorer.restoreprivacy.online |
-| GitHub node release | **v1.2.6** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6 |
+| GitHub node release | **v1.2.7** | https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.7 |
 
 Admit floor: **GNFPHash 1.0.4 and above**. 1.0.3 and lower commit **zero work**. Prefer **1.0.5** (device `cpuCores` / `cpuThreads` plus utilised threads).
 
@@ -27,35 +28,35 @@ Admit floor: **GNFPHash 1.0.4 and above**. 1.0.3 and lower commit **zero work**.
 
 ## Releases and packages
 
-Every GitHub **v1.2.6** asset is the same Node 18+ source tree (unix launcher + Windows `.cmd`). There is no native PE / `.app` in this pin. Pick one archive, verify the checksum, unpack, run.
+Every GitHub **v1.2.7** asset is the same Node 18+ source tree (unix launcher + Windows `.cmd`). There is no native PE / `.app` in this pin. Pick one archive, verify the checksum, unpack, run. Do **not** rebuild 1.2.6.
 
 | Package | File | For |
 |---|---|---|
-| macOS | `gnfp-node-1.2.6-macos.tar.gz` | macOS with Node.js 18+ |
-| Linux | `gnfp-node-1.2.6-linux.tar.gz` | Linux / Arch with Node.js 18+ |
-| Windows | `gnfp-node-1.2.6-windows.zip` | Windows with Node.js 18+ (`pack\win\gnfp-node.cmd`) |
+| macOS | `gnfp-node-1.2.7-macos.tar.gz` | macOS with Node.js 18+ |
+| Linux | `gnfp-node-1.2.7-linux.tar.gz` | Linux / Arch with Node.js 18+ |
+| Windows | `gnfp-node-1.2.7-windows.zip` | Windows with Node.js 18+ (`pack\win\gnfp-node.cmd`) |
 
 Checksums: `SHA256SUMS` next to the assets, or the release notes.
 
 ```bash
 # example (macOS / Linux)
-shasum -a 256 gnfp-node-1.2.6-macos.tar.gz
+shasum -a 256 gnfp-node-1.2.7-macos.tar.gz
 # must match SHA256SUMS
 ```
 
-Windows leftover (optional native PE; source zip on the tag is enough): https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md (`WINDOWS_HANDOFF.md` in this repo is a pointer).
+Windows leftover: [WINDOWS_HANDOFF.md](./WINDOWS_HANDOFF.md) and https://github.com/rgsneddon/handoff/blob/main/HANDOFF.md (`WINDOWS_HANDOFF.md` in this repo is a pointer; pin list is only in HANDOFF.md).
 
 ---
 
 ## How-to: macOS package
 
 1. Install **Node.js 18+** (`node -v`).
-2. Download `gnfp-node-1.2.6-macos.tar.gz` from the [v1.2.6 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6).
-3. Unpack and start **join** (default):
+2. Download `gnfp-node-1.2.7-macos.tar.gz` from the [v1.2.7 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.7).
+3. Unpack and start the **equal daemon** (default):
 
 ```bash
-tar xzf gnfp-node-1.2.6-macos.tar.gz
-cd gnfp-node-1.2.6
+tar xzf gnfp-node-1.2.7-macos.tar.gz
+cd gnfp-node-1.2.7
 ./pack/unix/gnfp-node
 ```
 
@@ -74,12 +75,12 @@ curl -sS http://127.0.0.1:8014/api/tip
 ## How-to: Linux package
 
 1. Install **Node.js 18+** (`node -v`).
-2. Download `gnfp-node-1.2.6-linux.tar.gz` from the [v1.2.6 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6).
-3. Unpack and start join:
+2. Download `gnfp-node-1.2.7-linux.tar.gz` from the [v1.2.7 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.7).
+3. Unpack and start the equal daemon:
 
 ```bash
-tar xzf gnfp-node-1.2.6-linux.tar.gz
-cd gnfp-node-1.2.6
+tar xzf gnfp-node-1.2.7-linux.tar.gz
+cd gnfp-node-1.2.7
 ./pack/unix/gnfp-node
 ```
 
@@ -96,11 +97,11 @@ Public stratum needs TLS certs (`--tls-cert` / `--tls-key` or `GNFP_TLS_CERT` / 
 ## How-to: Windows package
 
 1. Install **Node.js 18+** from https://nodejs.org and confirm `node -v` in `cmd`.
-2. Download `gnfp-node-1.2.6-windows.zip` from the [v1.2.6 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.6).
+2. Download `gnfp-node-1.2.7-windows.zip` from the [v1.2.7 release](https://github.com/rgsneddon/gnfp-node/releases/tag/v1.2.7).
 3. Unzip and start join:
 
 ```bat
-cd gnfp-node-1.2.6
+cd gnfp-node-1.2.7
 pack\win\gnfp-node.cmd
 ```
 
@@ -114,7 +115,7 @@ pack\win\gnfp-node.cmd --print-config
 curl -sS http://127.0.0.1:8014/api/tip
 ```
 
-This zip is **source + cmd**, not a native `.exe`. A PE rebuild, if required, is the Windows leftover — do not expect a sibling `v1.2.6-windows` tag.
+This zip is **source + cmd**, not a native `.exe`. A PE rebuild, if required, is the Windows leftover — do not expect a sibling `v1.2.7-windows` tag.
 
 ---
 
@@ -123,7 +124,7 @@ This zip is **source + cmd**, not a native `.exe`. A PE rebuild, if required, is
 ```bash
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-git checkout v1.2.6
+git checkout v1.2.7
 node src/node.js
 ```
 
@@ -132,17 +133,17 @@ Windows:
 ```bat
 git clone https://github.com/rgsneddon/gnfp-node.git
 cd gnfp-node
-git checkout v1.2.6
+git checkout v1.2.7
 node src\node.js
 ```
 
-`--print-config` JSON `version` must be `1.2.6`.
+`--print-config` JSON `version` must be `1.2.7`.
 
 ---
 
-## How-to: join the live node (default)
+## How-to: run the equal daemon (default)
 
-Join **relays** miners into Germany’s book. It does **not** mint a second chain.
+Default launch **is** an equal book. Local stratum is this node's miners. Seeds are peers; the node keeps minting if they go quiet, then adopts a more-work valid peer chain when one appears.
 
 ```bash
 node src/node.js
@@ -173,7 +174,7 @@ Always pull **:1474**. Public `:8014` is often filtered.
 Show up on explorer **Nodes online**:
 
 ```bash
-node src/node.js --announce-host mynode.example --role join
+node src/node.js --announce-host mynode.example --role book
 ```
 
 ---
@@ -189,9 +190,17 @@ curl -sS http://127.0.0.1:8014/api/tip
 
 ---
 
+## How-to: join relay (opt-in)
+
+`--join` relays local stratum into a seed. It does **not** mint.
+
+```bash
+node src/node.js --join
+```
+
 ## How-to: run an equal / solo node
 
-`--equal` / `--book` starts a **local minting** node. Operator only — it can fork if it does not stay in sync. Default remains **join**.
+`--equal` / `--book` is the same as the default equal daemon. Use a separate `--data-dir` for a second local book.
 
 ```bash
 node src/node.js --equal --data-dir ~/.gnfp-equal
@@ -210,14 +219,14 @@ This node:
 
 ---
 
-## How-to: point GNFPHash 1.0.5 at this node
+## How-to: point GNFPHash 1.0.6 at this node
 
-Use **GNFPHash 1.0.5** (or at least 1.0.4). 1.0.3 and lower are kicked with `miner_update_required` and credit nothing.
+Use **GNFPHash 1.0.6** (or at least 1.0.4). 1.0.3 and lower are kicked with `miner_update_required` and credit nothing.
 
 ```bash
 git clone https://github.com/rgsneddon/GNFPHash.git
 cd GNFPHash
-git checkout v1.0.5
+git checkout v1.0.6
 ```
 
 Public peer (TLS):
@@ -251,7 +260,7 @@ node src/node.js help mine
 node src/node.js help data
 ```
 
-`--print-config` must show `"version": "1.2.6"`, `"join": true` (unless you passed `--equal`), `"tls": true` unless `--notls`.
+`--print-config` must show `"version": "1.2.7"`, `"equalNode": true`, `"hashTxLive": 0`, `"join": false` (unless you passed `--join`), `"tls": true` unless `--notls`.
 
 ```bash
 curl -sS http://127.0.0.1:8014/api/tip
@@ -273,14 +282,14 @@ curl -sS http://127.0.0.1:8014/api/miner/miner-TAG
 | | Host | What |
 |---|---|---|
 | Germany | `de.restoreprivacy.online:1474` | well-known peer (default) |
-| Singapore | `sg.restoreprivacy.online:1474` | join peer, same tip |
-| You | `:1474` stratum + `:8014` HTTP | join (default) |
+| Singapore | `sg.restoreprivacy.online:1474` | peer, same chain |
+| You | `:1474` stratum + `:8014` HTTP | equal daemon (default) |
 
 ---
 
-## Honesty (1.2.6)
+## Honesty (1.2.7)
 
-Join, equal, and solo use the **same** rules as the Germany book:
+Equal, join, and solo use the **same** rules as the Germany book:
 
 - **Utilised** `threads` = farm actually running (`--threads` / `farm.running`).
 - **Device** `cpuCores` (physical) and `cpuThreads` (logical SMT).
@@ -299,13 +308,13 @@ Do not bottleneck cheats to 1 core in this pin.
 --pull HOST:PORT    same as --peer (does not change the chain)
 --http-port N       local HTTP node (default 8014)
 --stratum-port N    local miners (default 1474)
---join              join the live node (default; on from launch)
---equal / --book    local minting node (operator only)
+--join              opt-in stratum relay into a seed
+--equal / --book    equal daemon (default)
 --replica-only      HTTP only — no local stratum
 --data-dir PATH     node on disk (default ~/.gnfp-node)
 --poll-ms N         how often to pull the tip (default 1000)
 --announce-host H   register on the explorer
---role join|pool|solo
+--role book|join|pool|solo
 --notls             local plaintext only
 --tls-cert PATH     public stratum TLS cert (or GNFP_TLS_CERT)
 --tls-key PATH      public stratum TLS key (or GNFP_TLS_KEY)
@@ -321,11 +330,11 @@ The node is stored compressed (`tip.json` + append-only `blocks.jsonl.gz`) so a 
 
 | This node does | This node does not |
 |---|---|
-| Join the live node from launch (`gnfp-germany-book-v1`) | Mint a second chain (unless `--equal`) |
-| Relay **GNFPHash 1.0.4+** miners into the live node | Accept leftover `gnfp-mine` / 1.0.3 / GPU / ASIC |
-| Publish utilised vs device honesty and proven H/s | Hardcode 6 / 10 / 12 as a global thread rule |
-| Sync a local replica of the same tip | Need Germany online forever to keep the replica |
-| Reject a mutated / competing / shorter tip (409) | Let an operator rewrite a sealed height |
+| Run as an equal daemon of `gnfp-germany-book-v1` from launch | Require Germany as a master |
+| Serve **GNFPHash 1.0.4+** miners on local stratum | Accept leftover `gnfp-mine` / 1.0.3 / GPU / ASIC |
+| Adopt a more-work valid peer chain (shared prefix kept) | Rewrite sealed prefix balances |
+| Keep minting if seeds are unreachable | Enact `HASH_TX_LIVE=1` / one JSON object per hash |
+| Reject mutated payloads and foreign books | Let an operator rewrite a sealed prefix height |
 
 ---
 

@@ -110,20 +110,24 @@ export function pullPayload(blocks, query = {}, extra = {}) {
 
 /**
  * Apply a remote tip + incremental blocks onto local via verify-before-adopt.
- * Empty incoming with a conflicting same-height tipHash is a fork.
+ * Empty incoming with a competing same-height tipHash keeps first-seen local.
+ * If incoming does not link from the local tip (competing suffix), try it as
+ * its own sealed chain so most-work can reorg.
  */
 export function applyIncremental(local, remoteTip, incomingBlocks) {
   const incoming = Array.isArray(incomingBlocks) ? incomingBlocks : [];
   const localChain = extractChain(local);
+  const base = local && typeof local === 'object' ? local : {};
+  const tip = remoteTip && typeof remoteTip === 'object' ? remoteTip : {};
   if (!incoming.length) {
-    return adoptReplicaBook(local && typeof local === 'object' ? local : {}, {
-      ...(remoteTip && typeof remoteTip === 'object' ? remoteTip : {}),
-    });
+    return adoptReplicaBook(base, { ...tip });
   }
-  return adoptReplicaBook(local && typeof local === 'object' ? local : {}, {
-    ...(remoteTip && typeof remoteTip === 'object' ? remoteTip : {}),
-    blocks: localChain.concat(incoming),
-  });
+  const concatenated = localChain.concat(incoming);
+  const asExt = adoptReplicaBook(base, { ...tip, blocks: concatenated });
+  if (asExt.ok && !asExt.firstSeen) return asExt;
+  const asOwn = adoptReplicaBook(base, { ...tip, blocks: incoming });
+  if (asOwn.ok) return asOwn;
+  return asExt.ok ? asExt : asOwn;
 }
 
 export function wantsIncrementalPull(params = {}) {

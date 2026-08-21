@@ -6,7 +6,7 @@ import fs from 'fs';
 import http from 'http';
 import net from 'net';
 import tls from 'tls';
-import { GNFP_BOOK, extractChain, heightOf, sealBlock, tipHashOf } from './chronoflux_chain.js';
+import { adoptReplicaBook, GNFP_BOOK, extractChain, heightOf, sealBlock, tipHashOf } from './chronoflux_chain.js';
 import { applyIncremental, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
 import {
   BLOCK_REWARD_GNFP,
@@ -429,27 +429,22 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   }
 
   function adoptRemote(remote, incoming) {
+    const local = { blocks, height, book: GNFP_BOOK.id, coin: GNFP_BOOK.coin };
+    let got;
     if (remote && Array.isArray(remote.blocks) && incoming == null) {
-      const next = extractChain(remote);
-      const nextHeight = next.length ? heightOf(next[next.length - 1]) : Number(remote.height || 0);
-      const same = nextHeight === height && tipHashOf(next) === tipHashOf(blocks);
-      blocks = next;
-      height = nextHeight;
-      if (!same) persist();
-      nextJob();
-      return { ok: true, tip: tip(), sameTip: same };
+      got = adoptReplicaBook(local, remote);
+    } else {
+      got = applyIncremental(local, remote, incoming);
     }
-    const got = applyIncremental(
-      { blocks, height, book: GNFP_BOOK.id, coin: GNFP_BOOK.coin },
-      remote,
-      incoming,
-    );
     if (!got.ok) return got;
-    blocks = extractChain(got.book);
-    height = blocks.length ? heightOf(blocks[blocks.length - 1]) : Number(got.book.height || 0);
-    persist();
+    const next = extractChain(got.book);
+    const nextHeight = next.length ? heightOf(next[next.length - 1]) : Number(got.book.height || 0);
+    const same = nextHeight === height && tipHashOf(next) === tipHashOf(blocks);
+    blocks = next;
+    height = nextHeight;
+    if (!same) persist();
     nextJob();
-    return { ...got, tip: tip() };
+    return { ...got, ok: true, tip: tip(), sameTip: same || got.sameTip || got.firstSeen };
   }
 
   function handleApi(url, method, body) {

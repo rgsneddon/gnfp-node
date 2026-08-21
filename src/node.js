@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * gnfp-node — join the live Chronoflux node from launch.
- * --equal / --book opts into a local minting node.
+ * gnfp-node — equal Chronoflux daemon from launch.
+ * --join relays stratum into a seed (opt-in). --replica-only is watch-only.
  */
 import fs from 'fs';
 import path from 'path';
@@ -18,7 +18,7 @@ import {
   SEED_NODES,
 } from './cli_status.js';
 
-export const VERSION = '1.2.6';
+export const VERSION = '1.2.7';
 export const DEFAULT_HUB = GNFP_BOOK.stratum;
 
 export const HELP = renderHelp('', VERSION);
@@ -51,7 +51,7 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
     listenHttp: Number(flag(argv, '--http-port', '8014')),
     listenStratum: Number(flag(argv, '--stratum-port', '1474')),
     replicaOnly: argv.includes('--replica-only'),
-    join: !argv.includes('--equal') && !argv.includes('--book') && !argv.includes('--replica-only'),
+    join: argv.includes('--join') && !argv.includes('--equal') && !argv.includes('--book') && !argv.includes('--replica-only'),
     dataDir: flag(argv, '--data-dir', env.GNFP_NODE_DATA || defaultDataDir(env)),
     pollMs: Number(flag(argv, '--poll-ms', env.GNFP_NODE_POLL_MS || '1000')),
     announceHost: flag(argv, '--announce-host', env.GNFP_ANNOUNCE_HOST || ''),
@@ -60,13 +60,13 @@ export function parseNodeArgs(argv = process.argv, env = process.env) {
       '--announce-url',
       env.GNFP_ANNOUNCE_URL || 'https://explorer.restoreprivacy.online/api/nodes',
     ),
-    role: flag(argv, '--role', 'join'),
+    role: flag(argv, '--role', argv.includes('--join') ? 'join' : 'book'),
     tlsCert: flag(argv, '--tls-cert', env.GNFP_TLS_CERT || ''),
     tlsKey: flag(argv, '--tls-key', env.GNFP_TLS_KEY || ''),
     tls,
     verifyBeforeAdopt: true,
-    equalNode: argv.includes('--equal') || argv.includes('--book'),
-    emissionBook: argv.includes('--equal') || argv.includes('--book'),
+    equalNode: !argv.includes('--replica-only') && (!argv.includes('--join') || argv.includes('--equal') || argv.includes('--book')),
+    emissionBook: !argv.includes('--replica-only') && (!argv.includes('--join') || argv.includes('--equal') || argv.includes('--book')),
   };
 }
 

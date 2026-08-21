@@ -3,10 +3,33 @@
  */
 import http from 'http';
 import { applyIncremental, CATCHUP_PULL_LIMIT, parsePullQuery, pullPayload, tipIdentity } from './book_pull.js';
-import { extractChain, heightOf } from './chronoflux_chain.js';
+import { adoptReplicaBook, extractChain, heightOf } from './chronoflux_chain.js';
 import { SEED_NODES } from './cli_status.js';
 import { hubBaseUrl, hubGetJson } from './hub_http.js';
 import { loadNodeStore, saveNodeStore } from './node_store.js';
+
+async function pullPeerChain(base, { fetchImpl, timeoutMs, batchLimit = CATCHUP_PULL_LIMIT } = {}) {
+  const blocks = [];
+  let afterHeight = -1;
+  let afterHash = '';
+  for (let i = 0; i < 10_000; i += 1) {
+    const q = new URLSearchParams({
+      afterHeight: String(afterHeight),
+      afterHash,
+      limit: String(batchLimit),
+      incremental: '1',
+    });
+    const pulled = await hubGetJson(`${base}/api/blocks?${q}`, { fetchImpl, timeoutMs });
+    const incoming = Array.isArray(pulled?.blocks) ? pulled.blocks : [];
+    if (!incoming.length) break;
+    blocks.push(...incoming);
+    const last = incoming[incoming.length - 1];
+    afterHeight = heightOf(last, afterHeight);
+    afterHash = String(last?.hash || '');
+    if (pulled?.more !== true) break;
+  }
+  return { ok: blocks.length > 0, blocks };
+}
 
 export function localCursor(book, { limit = CATCHUP_PULL_LIMIT } = {}) {
   const chain = extractChain(book);
@@ -124,6 +147,27 @@ export async function syncOnce({
     }
     const adopted = applyIncremental(current, tip, incoming);
     if (!adopted.ok) {
+      const rewind = await pullPeerChain(base, { fetchImpl, timeoutMs, batchLimit });
+      if (rewind.ok && rewind.blocks.length) {
+        const again = adoptReplicaBook(
+          current && typeof current === 'object' ? current : {},
+          { ...tip, blocks: rewind.blocks },
+        );
+        if (again.ok) {
+          current = again.book;
+          here = identOf(current);
+          if (dataDir) saveNodeStore(dataDir, current);
+          progress(here);
+          return {
+            ...again,
+            book: current,
+            localHeight: here.height,
+            networkHeight,
+            tipHash: here.hash,
+            peer,
+          };
+        }
+      }
       return {
         ...adopted,
         localHeight: here.height,

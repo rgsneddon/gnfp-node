@@ -1,7 +1,7 @@
 {
   "name": "gnfp-node",
-  "version": "1.2.6",
-  "description": "GNFP Chronoflux node: join-by-default, live CLI, compact book",
+  "version": "1.2.7",
+  "description": "GNFP Chronoflux equal daemon: Nakamoto most-work, live CLI, compact book",
   "type": "module",
   "bin": {
     "gnfp-node": "src/node.js"

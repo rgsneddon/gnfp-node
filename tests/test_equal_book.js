@@ -160,6 +160,34 @@ test('equal-book credits hashesProvenByShare, not 1, and stats cannot enlarge th
   assert.deepEqual(after, before);
 });
 
+test('two equal books converge by most-work; lesser-work side adopts', () => {
+  const a = createEqualBook({ bits: 14, dataDir: scratchDir() });
+  const b = createEqualBook({ bits: 14, dataDir: scratchDir() });
+  const share = (book, name) => {
+    const job = book.nextJob();
+    const nonce = findNonce(job);
+    return book.submitShare({
+      username: name,
+      nonce,
+      jobId: job.jobId,
+      client: 'GNFPHash',
+      version: '1.0.4',
+    });
+  };
+  const first = share(a, 'gnfp1alice.worker');
+  assert.equal(first.accepted, true, first.reason);
+  assert.equal(a.tip().height, 1);
+  const b1 = share(b, 'gnfp1bob.worker');
+  assert.equal(b1.accepted, true, b1.reason);
+  const b2 = share(b, 'gnfp1bob.worker');
+  assert.equal(b2.accepted, true, b2.reason);
+  assert.ok(b.tip().height >= 2, `b height ${b.tip().height}`);
+  const got = a.adoptRemote({ ...b.tip(), blocks: b.blocks() });
+  assert.equal(got.ok, true, got.reason);
+  assert.equal(a.tip().tipHash, b.tip().tipHash);
+  assert.equal(a.tip().height, b.tip().height);
+});
+
 test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
   const dir = scratchDir();
   const book = createEqualBook({ dataDir: dir, bits: 14 });

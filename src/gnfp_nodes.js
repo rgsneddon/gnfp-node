@@ -18,11 +18,11 @@ export const GNFP_NODES = Object.freeze([
   }),
   Object.freeze({
     id: 'singapore',
-    label: 'Singapore (join)',
+    label: 'Singapore (peer)',
     host: 'sg.restoreprivacy.online',
     port: 1474,
     stratum: 'sg.restoreprivacy.online:1474',
-    role: 'join',
+    role: 'peer',
   }),
   Object.freeze({
     id: 'helsinki',

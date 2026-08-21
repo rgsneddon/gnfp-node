@@ -226,9 +226,38 @@ export function sameSealedTip(localBlocks, remoteBlocks) {
   return tipHashOf(localBlocks) === tipHashOf(remoteBlocks);
 }
 
+/** Proven work of one sealed block. Missing difficulty counts as 1 so length is most-work for equal-bits books. */
+export function blockWork(block) {
+  const d = Number(block?.difficulty);
+  if (Number.isFinite(d) && d > 0) return d;
+  const bits = Number(block?.difficultyBits);
+  if (Number.isFinite(bits) && bits >= 0 && bits <= 63) return 2 ** bits;
+  return 1;
+}
+
+export function chainWork(blocks) {
+  if (!Array.isArray(blocks) || !blocks.length) return 0;
+  let sum = 0;
+  for (const b of blocks) sum += blockWork(b);
+  return sum;
+}
+
+/** Longest shared sealed prefix (matching hashes). Fork index is this length. */
+export function commonPrefixLength(a, b) {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  const n = Math.min(left.length, right.length);
+  let i = 0;
+  for (; i < n; i += 1) {
+    if (String(left[i]?.hash || '') !== String(right[i]?.hash || '')) break;
+  }
+  return i;
+}
+
 /**
- * Accept only a valid hash-linked extension of local.
- * Same-height conflicting tip, rewritten sealed prefix, or shorter book → reject.
+ * Nakamoto most-work: adopt remote when it is a valid sealed chain with
+ * strictly more accumulated work. Shared prefix stays; only the suffix reorgs.
+ * Equal work keeps first-seen (local). Invalid / mutated remote is never adopted.
  */
 export function shouldAdoptRemote(localBlocks, remoteBlocks) {
   const remote = Array.isArray(remoteBlocks) ? remoteBlocks : [];
@@ -238,12 +267,12 @@ export function shouldAdoptRemote(localBlocks, remoteBlocks) {
   if (!local.length) return remoteCheck.ok;
   const localCheck = verifyChain(local);
   if (!localCheck.ok) return false;
-  if (remote.length <= local.length) return false;
-  for (let i = 0; i < local.length; i += 1) {
-    if (String(local[i].hash) !== String(remote[i].hash)) return false;
-    if (heightOf(local[i], i) !== heightOf(remote[i], i)) return false;
-  }
-  return true;
+  if (sameSealedTip(local, remote)) return false;
+  const prefix = commonPrefixLength(local, remote);
+  // Established live prefix cannot be replaced by a competing genesis.
+  // Short isolated books (tests / fresh daemons) may still meet on most-work.
+  if (prefix === 0 && local.length >= 8) return false;
+  return chainWork(remote) > chainWork(local);
 }
 
 export function extractChain(book) {
@@ -255,11 +284,11 @@ export function extractChain(book) {
 }
 
 /**
- * Join/pool adopt. A taller book is taken only when it is a verifyChain-valid
- * hash-linked extension (shouldAdoptRemote). A first book is taken only when
- * it seals into a valid chain. Stats-only payloads may refresh the same tip
- * while keeping the local sealed blocks. A previousHash + height with no
- * blocks is not an extension.
+ * Peer adopt. A more-work valid sealed chain wins (Nakamoto). The shared
+ * prefix is kept; only the suffix reorgs. Equal work keeps first-seen local.
+ * A first book is taken only when it seals into a valid chain. Stats-only
+ * payloads may refresh the same tip while keeping the local sealed blocks.
+ * Height-only / previousHash-only payloads are not an extension.
  */
 function sealedRemoteOrReject(remoteChain) {
   if (!remoteChain.length) return { ok: true, blocks: [] };
@@ -302,13 +331,30 @@ export function adoptReplicaBook(local, remote) {
       return { ok: true, book: { ...remote, blocks: remoteSealed }, sealed: true };
     }
     if (shouldAdoptRemote(localSealed, remoteSealed)) {
-      return { ok: true, book: { ...remote, blocks: remoteSealed }, extended: true };
+      const prefix = commonPrefixLength(localSealed, remoteSealed);
+      return {
+        ok: true,
+        book: { ...remote, blocks: remoteSealed },
+        extended: prefix === localSealed.length,
+        reorg: prefix < localSealed.length,
+        prefix,
+      };
     }
     if (sameSealedTip(localSealed, remoteSealed)) {
       return {
         ok: true,
         book: { ...remote, blocks: localSealed },
         sameTip: true,
+      };
+    }
+    const prefix = commonPrefixLength(localSealed, remoteSealed);
+    if (verifyChain(remoteSealed).ok) {
+      return {
+        ok: true,
+        book: { ...remote, blocks: localSealed },
+        firstSeen: true,
+        sameTip: prefix === localSealed.length,
+        prefix,
       };
     }
     return { ok: false, reason: 'not_a_valid_extension' };
@@ -333,7 +379,12 @@ export function adoptReplicaBook(local, remote) {
       && localTipHash
       && remoteTipHash !== localTipHash
     ) {
-      return { ok: false, reason: 'same_height_fork' };
+      return {
+        ok: true,
+        book: { ...remote, blocks: localSealed },
+        firstSeen: true,
+        reason: 'first_seen',
+      };
     }
     return { ok: true, book: { ...remote, blocks: localSealed }, sameTip: true };
   }
@@ -348,15 +399,10 @@ export function isConflictingRewrite(local, remote) {
     const adopted = adoptReplicaBook(local, remote);
     return !adopted.ok;
   }
-  const remoteSealed = ensureSealedChain(remoteChain);
-  if (!verifyChain(remoteSealed).ok) return true;
-  const localSealed = ensureSealedChain(extractChain(local));
+  if (!verifyChain(remoteChain).ok) return true;
+  const localSealed = extractChain(local);
   if (!localSealed.length) return false;
-  if (remoteSealed.length > localSealed.length) {
-    return !shouldAdoptRemote(localSealed, remoteSealed);
-  }
-  if (remoteSealed.length === localSealed.length) {
-    return tipHashOf(remoteSealed) !== tipHashOf(localSealed);
-  }
+  if (shouldAdoptRemote(localSealed, remoteChain)) return false;
+  if (sameSealedTip(localSealed, remoteChain)) return false;
   return false;
 }

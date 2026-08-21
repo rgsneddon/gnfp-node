@@ -114,6 +114,12 @@ export const MINER_MINT_ONLY = 1;
  * hard fork (may be years away) to require per-hash network commit
  * of every open-window unit before collate.
  *
+ * Architecture kept viable (not enacted): hashCommitTx / collateHashCommits /
+ * hashWindowCommitment / confirmedRoundRowsFromHashes already produce O(miners)
+ * sealed rows from proven hashes. Equal-daemon most-work adopt does not reseal
+ * historical blocks, so a later HASH_TX_LIVE=1 cutover can still commit the
+ * open window without rewriting spendable balances. Do not flip this pin.
+ *
  * Mint law: 1 GNFP pot per formed block, split by in-window work,
  * plus 0.000000001 GNFP per proven hash to that miner. Not 1 GNFP per miner.
  * Paper: https://zenodo.org/records/22037205
@@ -421,7 +427,6 @@ export function isOwnerHistoryTx(tx, address) {
   if (!tx || !addr) return false;
   if (String(tx.from || '') !== addr && String(tx.to || '') !== addr) return false;
   if (String(tx.kind || '') === HASH_TX_KIND && tx.confirmed !== true) return false;
-  if (tx.confirmed === false) return false;
   return true;
 }
 

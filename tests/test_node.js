@@ -9,22 +9,21 @@ import { parseNodeArgs, VERSION } from '../src/node.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('README how-tos name each 1.2.6 pack and join/equal/miner paths', () => {
+test('README how-tos name each 1.2.7 pack and equal-daemon paths', () => {
   const md = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
-  assert.match(md, /\*\*Pin:\*\* `1.2.6`/);
-  assert.match(md, /gnfp-node-1\.2\.6-macos\.tar\.gz/);
-  assert.match(md, /gnfp-node-1\.2\.6-linux\.tar\.gz/);
-  assert.match(md, /gnfp-node-1\.2\.6-windows\.zip/);
+  assert.match(md, /\*\*Pin:\*\* `1.2.7`/);
+  assert.match(md, /gnfp-node-1\.2\.7-macos\.tar\.gz/);
+  assert.match(md, /gnfp-node-1\.2\.7-linux\.tar\.gz/);
+  assert.match(md, /gnfp-node-1\.2\.7-windows\.zip/);
   assert.match(md, /How-to: macOS package/);
   assert.match(md, /How-to: Linux package/);
   assert.match(md, /How-to: Windows package/);
-  assert.match(md, /How-to: join the live node/);
-  assert.match(md, /How-to: run an equal \/ solo node/);
-  assert.match(md, /GNFPHash 1\.0\.5/);
-  assert.match(md, /releases\/tag\/v1\.2\.6/);
+  assert.match(md, /equal daemon|How-to: run the equal daemon/i);
+  assert.match(md, /GNFPHash 1\.0\.[56]/);
+  assert.match(md, /releases\/tag\/v1\.2\.7/);
 });
 
-test('cli help names GNFP join node', () => {
+test('cli help names GNFP equal daemon', () => {
   const r = spawnSync(process.execPath, ['src/node.js', '--help'], {
     cwd: root,
     encoding: 'utf8',
@@ -36,8 +35,9 @@ test('cli help names GNFP join node', () => {
   assert.match(r.stdout, /TLS is the shipped default/);
   assert.match(r.stdout, /Verify-before-adopt/);
   assert.match(r.stdout, /--notls/);
-  assert.match(r.stdout, /join from launch/);
+  assert.match(r.stdout, /equal daemon/);
   assert.match(r.stdout, /--join/);
+  assert.match(r.stdout, /not masters/);
 });
 
 test('parse args default to Germany book', () => {
@@ -58,14 +58,19 @@ test('parse args default to Germany book', () => {
   assert.equal(j.tls, true);
   assert.match(String(j.hubHttp), /de\.restoreprivacy\.online:1474/);
   assert.equal(j.verifyBeforeAdopt, true);
-  assert.equal(j.join, true);
-  assert.equal(j.equalNode, false);
-  assert.equal(j.emissionBook, false);
-  assert.equal(j.role, 'join');
+  assert.equal(j.join, false);
+  assert.equal(j.equalNode, true);
+  assert.equal(j.emissionBook, true);
+  assert.equal(j.role, 'book');
+  assert.equal(j.hashTxLive, 0);
+  assert.equal(j.book, 'gnfp-germany-book-v1');
   const equal = parseNodeArgs(['node', 'node.js', '--equal']);
   assert.equal(equal.join, false);
   assert.equal(equal.equalNode, true);
   assert.equal(equal.emissionBook, true);
+  const join = parseNodeArgs(['node', 'node.js', '--join']);
+  assert.equal(join.join, true);
+  assert.equal(join.equalNode, false);
   const ann = parseNodeArgs([
     'node', 'node.js', '--announce-host', 'mynode.example', '--role', 'pool',
   ]);
