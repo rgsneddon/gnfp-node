@@ -5,7 +5,7 @@ Run **your own $GNFP node**. Same chain as everyone else. Default is an **equal 
 **Pin:** `1.2.7`  
 **Coin:** GNFP  
 **Chain:** `gnfp-germany-book-v1` (immutable id; competing suffixes resolve by most-work)  
-**Algo:** **GNFPHash** — old `gnfp-mine`, BeamHash III, GPU and ASIC are refused  
+**Algo:** **GNFPHash** — old `gnfp-mine`, GPU and ASIC are refused. Only miner work mints.
 **Needs:** Node.js **18+** on the PATH. No `npm install`.  
 **`HASH_TX_LIVE`:** `0` (1-hash=1-tx is not enacted; collate path stays in book law for a later fork).
 
