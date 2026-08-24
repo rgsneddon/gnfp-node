@@ -18,6 +18,7 @@ import {
   hashesProvenByShare,
   SHARE_DIFFICULTY_BITS,
   LIVE_MIN_DIFFICULTY_BITS,
+  MAX_DIFFICULTY_BITS,
   GENESIS_DIFFICULTY_BITS,
   TARGET_BLOCK_INTERVAL_MS,
   retargetBits,
@@ -141,10 +142,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     const last = blocks[blocks.length - 1];
     const storedBits = Number(last?.difficultyBits);
     const storedDiff = Number(last?.difficulty);
-    if (Number.isFinite(storedBits) && storedBits >= 1 && storedBits <= 32) {
+    if (Number.isFinite(storedBits) && storedBits >= 1 && storedBits <= MAX_DIFFICULTY_BITS) {
       lastBlockBits = storedBits;
     } else if (Number.isFinite(storedDiff) && storedDiff > 32) {
-      lastBlockBits = Math.max(1, Math.min(32, Math.round(Math.log2(storedDiff))));
+      lastBlockBits = Math.max(1, Math.min(MAX_DIFFICULTY_BITS, Math.round(Math.log2(storedDiff))));
     } else if (Number.isFinite(storedDiff) && storedDiff >= 1 && storedDiff <= 32) {
       lastBlockBits = storedDiff;
     }
@@ -182,15 +183,15 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
     if (!rec) return rec;
     if (threads != null && threads !== '') {
       const n = Math.floor(Number(threads));
-      if (Number.isFinite(n) && n >= 0) rec.claimed = Math.min(256, n);
+      if (Number.isFinite(n) && n >= 0) rec.claimed = n;
     }
     if (cpuCores != null && cpuCores !== '') {
       const c = Math.floor(Number(cpuCores));
-      if (Number.isFinite(c) && c > 0) rec.cpuCores = Math.min(256, c);
+      if (Number.isFinite(c) && c > 0) rec.cpuCores = c;
     }
     if (cpuThreads != null && cpuThreads !== '') {
       const t = Math.floor(Number(cpuThreads));
-      if (Number.isFinite(t) && t > 0) rec.cpuThreads = Math.min(256, t);
+      if (Number.isFinite(t) && t > 0) rec.cpuThreads = t;
     }
     return rec;
   }
@@ -257,7 +258,10 @@ export function createEqualBook({ dataDir = '', bits = 1, printer = null } = {})
   function formBits() {
     const forced = Number(bits);
     if (Number.isFinite(forced) && forced > 0) {
-      return Math.max(LIVE_MIN_DIFFICULTY_BITS, Math.floor(forced));
+      return Math.max(
+        LIVE_MIN_DIFFICULTY_BITS,
+        Math.min(MAX_DIFFICULTY_BITS, Math.floor(forced)),
+      );
     }
     const interval = lastFormedAt > 0 ? Date.now() - lastFormedAt : 0;
     return retargetBits(liveHashrate(), lastBlockBits, TARGET_BLOCK_INTERVAL_MS, {

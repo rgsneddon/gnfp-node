@@ -7,7 +7,7 @@
  * adds previousHash + hash so later rewrites can be rejected.
  */
 import { createHash } from 'crypto';
-import { LIVE_MIN_DIFFICULTY_BITS, sealedRoundAgrees } from './book_law.js';
+import { LIVE_MIN_DIFFICULTY_BITS, MAX_DIFFICULTY_BITS, sealedRoundAgrees } from './book_law.js';
 
 export const GENESIS_PREV = '0'.repeat(64);
 export const CONFIRMATION_MS = 72_000;
@@ -237,8 +237,9 @@ export function sameSealedTip(localBlocks, remoteBlocks) {
  */
 export function blockWork(block) {
   const bits = Number(block?.difficultyBits);
-  if (Number.isFinite(bits) && bits >= 0 && bits <= 32) return 2 ** bits;
+  if (Number.isFinite(bits) && bits >= 0 && bits <= MAX_DIFFICULTY_BITS) return 2 ** bits;
   const d = Number(block?.difficulty);
+  // Legacy `difficulty` stored a bit count in 1..32, or work when > 32.
   if (Number.isFinite(d) && d > 32) return d;
   if (Number.isFinite(d) && d >= 1 && d <= 32) return 2 ** d;
   return 2 ** LIVE_MIN_DIFFICULTY_BITS;

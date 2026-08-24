@@ -19,6 +19,8 @@ import {
   TARGET_BLOCK_INTERVAL_MS,
   blockBitsFromHashrate,
   bookLawOnTip,
+  clampDifficultyBits,
+  MAX_DIFFICULTY_BITS,
   canFormBlock,
   emptyHashWindow,
   hashBonusGnfp,
@@ -221,6 +223,18 @@ test('book law: difficulty retargets toward 90s and is not stuck at 60000', () =
   assert.ok(fast.difficultyBits > mid.difficultyBits);
 
   assert.equal(blockBitsFromHashrate(280), mid.difficultyBits);
+});
+
+test('book law: 4.29e9 (32 bits) is not a ceiling; retarget can use the full hash', () => {
+  assert.equal(MAX_DIFFICULTY_BITS, 256);
+  assert.equal(clampDifficultyBits(40), 40);
+  assert.equal(clampDifficultyBits(256), 256);
+  assert.equal(clampDifficultyBits(300), 256);
+  assert.equal(retargetBits(0, 32, 90_000, { lastBlockIntervalMs: 250 }), 40);
+  const high = networkDifficulty({ bits: 40 });
+  assert.equal(high.difficultyBits, 40);
+  assert.ok(high.difficulty > 2 ** 32);
+  assert.equal(bookLawOnTip().maxDifficultyBits, 256);
 });
 
 test('tip identity carries book law; old seals keep their hash', () => {

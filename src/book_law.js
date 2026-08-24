@@ -22,7 +22,13 @@ export const POOL_FEE_PAYOUT = 'gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c';
 /** Target spacing for retarget. Not a mint clock. */
 export const TARGET_BLOCK_INTERVAL_MS = 90_000;
 export const MIN_DIFFICULTY_BITS = 1;
-export const MAX_DIFFICULTY_BITS = 32;
+/**
+ * SHA-256 width. 2^32 (~4.29e9) was a fake ceiling that froze live
+ * difficulty while hashrate kept climbing, so blocks ran far under 90s.
+ * GPU/ASIC still cannot mint: sequential GNFPHash + client/nonce/solution
+ * refusals. This only lets honest retarget use the whole hash.
+ */
+export const MAX_DIFFICULTY_BITS = 256;
 /** Live floor: 2^14 hashes ≈ 90s at ~182 H/s. Never collapse to 1/8-bit on restart. */
 export const LIVE_MIN_DIFFICULTY_BITS = 14;
 /** Share target sent to miners. Block form uses retarget bits, not this. */
@@ -32,6 +38,7 @@ export const GENESIS_DIFFICULTY_BITS = 21;
 
 export function clampDifficultyBits(bits) {
   const n = Math.floor(Number(bits) || 0);
+  if (Number(bits) === Infinity) return MAX_DIFFICULTY_BITS;
   if (!Number.isFinite(n) || n <= 0) return GENESIS_DIFFICULTY_BITS;
   return Math.max(MIN_DIFFICULTY_BITS, Math.min(MAX_DIFFICULTY_BITS, n));
 }
@@ -89,6 +96,8 @@ export function hashesProvenByShare(bits = SHARE_DIFFICULTY_BITS) {
     LIVE_MIN_DIFFICULTY_BITS,
     Math.min(MAX_DIFFICULTY_BITS, Math.floor(Number(bits) || SHARE_DIFFICULTY_BITS)),
   );
+  // JS integer mint must stay finite. 2^53-1 saturates; PoW bits may still be 256.
+  if (b >= 53) return Number.MAX_SAFE_INTEGER;
   return 2 ** b;
 }
 
@@ -562,6 +571,7 @@ export function bookLawOnTip({
     shareCreditMicro: SHARE_CREDIT_MICRO,
     unitsPerGnfp: UNITS_PER_GNFP,
     liveMinDifficultyBits: LIVE_MIN_DIFFICULTY_BITS,
+    maxDifficultyBits: MAX_DIFFICULTY_BITS,
     genesisDifficultyBits: GENESIS_DIFFICULTY_BITS,
     shareDifficultyBits: SHARE_DIFFICULTY_BITS,
     bookLawId: BOOK_LAW_ID,

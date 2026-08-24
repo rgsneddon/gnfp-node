@@ -227,6 +227,8 @@ test('nakamoto: mixed live-style vs equal-book difficulty uses commensurate work
     })),
   );
   assert.equal(blockWork(heavier[0]), 2 ** highBits);
+  assert.equal(blockWork({ difficultyBits: 40 }), 2 ** 40);
+  assert.ok(blockWork({ difficultyBits: 40 }) > blockWork({ difficultyBits: 32 }));
   assert.equal(chainWork(heavier) > chainWork(live), true);
   assert.equal(shouldAdoptRemote(live, heavier), true);
   const adopted = adoptReplicaBook(
