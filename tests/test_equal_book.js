@@ -7,7 +7,7 @@ import { GNFP_BOOK, hashMatches, hashBlock, adoptReplicaBook } from '../src/chro
 import { hashMeetsJob } from '../src/cpu_pow.js';
 import { createEqualBook } from '../src/equal_book.js';
 import os from 'os';
-import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, hashBonusGnfp, hashesProvenByShare, sealedRoundAgrees } from '../src/book_law.js';
+import { BLOCK_REWARD_GNFP, HASH_BONUS_GNFP, NANOS_PER_GNFP, hashBonusGnfp, hashesProvenByShare, sealedRoundAgrees } from '../src/book_law.js';
 
 function scratchDir() {
   const dir = path.join(os.tmpdir(), `equal-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -190,7 +190,7 @@ test('two equal books converge by most-work; lesser-work side adopts', () => {
   assert.equal(a.tip().height, b.tip().height);
 });
 
-test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
+test('equal-book formed amount is 1 plus proven hashes times 1e-10', () => {
   const dir = scratchDir();
   const book = createEqualBook({ dataDir: dir, bits: 14 });
   const job = book.nextJob();
@@ -206,7 +206,7 @@ test('equal-book formed amount is 1 plus proven hashes times 1e-9', () => {
   assert.equal(got.block.formed, true);
   const proven = hashesProvenByShare(14);
   assert.equal(got.sealed.amount, BLOCK_REWARD_GNFP + hashBonusGnfp(proven));
-  assert.equal(got.sealed.amount, 1 + proven / 1e9);
+  assert.equal(got.sealed.amount, 1 + proven / NANOS_PER_GNFP);
   const pot = Number(got.sealed.potSplits['gnfp1carol.worker'] || 0);
   assert.equal(book.minerNanos()['gnfp1carol.worker'], proven + pot);
   assert.ok((got.sealed.transactions || []).some((t) => t.kind === 'hash' && t.confirmed === true));

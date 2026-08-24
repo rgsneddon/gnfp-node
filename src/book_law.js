@@ -3,15 +3,25 @@
  * Pool / explorer only report them — they do not invent a second difficulty.
  */
 import { createHash } from 'crypto';
-/** Legacy 1e-8 subunit (1 GNFP pot). Too coarse for the 1e-9 hash bonus. */
+/** Legacy 1e-8 subunit (1 GNFP pot). Too coarse for the 1e-10 hash bonus. */
 export const UNITS_PER_GNFP = 100_000_000;
-export const NANOS_PER_GNFP = 1_000_000_000;
+/** Smallest mint unit is 10^{-10} GNFP (name kept; scale is not SI nano). */
+export const NANOS_PER_GNFP = 10_000_000_000;
 export const BLOCK_REWARD_GNFP = 1;
 export const BLOCK_REWARD_MICRO = UNITS_PER_GNFP;
 export const BLOCK_REWARD_NANOS = NANOS_PER_GNFP;
-/** 0.000000001 GNFP per in-window hash. Resets every formed block. */
+/** 0.0000000001 GNFP per in-window hash. Resets every formed block. */
 export const HASH_BONUS_NANOS = 1;
 export const HASH_BONUS_GNFP = HASH_BONUS_NANOS / NANOS_PER_GNFP;
+/** Public amount frame: 10 fractional digits so one hash bonus is visible. */
+export const GNFP_FRACTION_DIGITS = 10;
+
+export function formatGnfp(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '0';
+  if (Math.abs(v - Math.round(v)) < 1e-12) return String(Math.round(v));
+  return v.toFixed(GNFP_FRACTION_DIGITS).replace(/0+$/, '').replace(/\.$/, '');
+}
 /** Public pool/explorer preview. Amounts honest; parties sheared. */
 export const PUBLIC_TX_PREVIEW = 10;
 /** @deprecated old 1e-8 per accepted share — do not use for new credits */
@@ -130,7 +140,7 @@ export const MINER_MINT_ONLY = 1;
  * open window without rewriting spendable balances. Do not flip this pin.
  *
  * Mint law: 1 GNFP pot per formed block, split by in-window work,
- * plus 0.000000001 GNFP per proven hash to that miner. Not 1 GNFP per miner.
+ * plus 0.0000000001 GNFP per proven hash to that miner. Not 1 GNFP per miner.
  * Paper: https://zenodo.org/records/22037205
  */
 export const HASH_TX_LIVE = 0;
@@ -142,6 +152,7 @@ export function bookLawFingerprint() {
     GENESIS_DIFFICULTY_BITS,
     SHARE_DIFFICULTY_BITS,
     HASH_BONUS_NANOS,
+    NANOS_PER_GNFP,
     BLOCK_REWARD_GNFP,
     POOL_FEE_BPS,
     hashesProvenByShare(SHARE_DIFFICULTY_BITS),
@@ -372,7 +383,7 @@ export function hashWindowCommitment(hashCounts = {}) {
 
 /**
  * One owner-visible confirmed movement after a tip: pot-share + hash bonus.
- * Used by the live wallet explorer now (any units) and by the future 1e-9 path.
+ * Used by the live wallet explorer now (any units) and by the future 1e-10 path.
  */
 export function ownerRoundRow({
   to,
@@ -404,7 +415,7 @@ export function ownerRoundRow({
 
 /**
  * Future 1-hash=1-tx seal: one confirmed row per miner whose amount is
- * (share of 1 GNFP pot) + (hashes × 0.000000001). O(miners), not O(hashes).
+ * (share of 1 GNFP pot) + (hashes × 0.0000000001). O(miners), not O(hashes).
  * Not applied by the live DE pool while HASH_TX_LIVE is 0.
  */
 export function confirmedRoundRowsFromHashes(hashCounts, {
@@ -470,7 +481,7 @@ function hashTotalOf(hashCounts) {
   );
 }
 
-/** Sealed coinbase is always 1 GNFP + 1e-9 GNFP per in-window hash. */
+/** Sealed coinbase is always 1 GNFP + 1e-10 GNFP per in-window hash. */
 export function sealedCoinbaseNanos(hashCounts) {
   return BLOCK_REWARD_NANOS + hashBonusNanos(hashTotalOf(hashCounts));
 }
@@ -505,7 +516,7 @@ function splitPotByHashes(hashCounts, potNanos) {
 }
 
 /**
- * 1 GNFP pot split by in-window hashes, plus 1e-9 GNFP per hash.
+ * 1 GNFP pot split by in-window hashes, plus 1e-10 GNFP per hash.
  * Returns a fresh empty window — bonus resets on every formed block.
  */
 export function settleWindowCredits(hashCounts, { potNanos = BLOCK_REWARD_NANOS } = {}) {
@@ -529,7 +540,7 @@ export function settleWindowCredits(hashCounts, { potNanos = BLOCK_REWARD_NANOS 
 
 /**
  * Join/equal-book check: sealed creditsNanos match settleWindowCredits
- * of the collated bonus window, and amount is 1 GNFP + 1e-9 per hash.
+ * of the collated bonus window, and amount is 1 GNFP + 1e-10 per hash.
  */
 export function sealedRoundAgrees(block) {
   const bonus = block?.bonusNanos && typeof block.bonusNanos === 'object' ? block.bonusNanos : {};
@@ -565,6 +576,7 @@ export function bookLawOnTip({
     blockRewardGnfp: BLOCK_REWARD_GNFP,
     hashBonusGnfp: HASH_BONUS_GNFP,
     hashBonusNanos: HASH_BONUS_NANOS,
+    gnfpFractionDigits: GNFP_FRACTION_DIGITS,
     poolFeeBps: POOL_FEE_BPS,
     poolFeePayout: POOL_FEE_PAYOUT,
     nanosPerGnfp: NANOS_PER_GNFP,

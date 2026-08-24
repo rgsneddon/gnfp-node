@@ -7,6 +7,8 @@ import {
   HASH_BONUS_GNFP,
   HASH_BONUS_NANOS,
   NANOS_PER_GNFP,
+  GNFP_FRACTION_DIGITS,
+  formatGnfp,
   POOL_FEE_BPS,
   POOL_FEE_PAYOUT,
   PUBLIC_TX_PREVIEW,
@@ -57,18 +59,23 @@ test('book law: time never mints; reward and dust are fixed', () => {
   assert.equal(canFormBlock({ blockHashMet: false }), false);
   assert.equal(canFormBlock({ blockHashMet: true }), true);
   assert.equal(BLOCK_REWARD_GNFP, 1);
-  assert.equal(HASH_BONUS_GNFP, 0.000000001);
+  assert.equal(HASH_BONUS_GNFP, 0.0000000001);
   assert.equal(HASH_BONUS_NANOS, 1);
-  assert.equal(NANOS_PER_GNFP, 1_000_000_000);
+  assert.equal(NANOS_PER_GNFP, 10_000_000_000);
+  assert.equal(hashBonusGnfp(1), 1e-10);
+  assert.equal(hashBonusGnfp(10), 1e-9);
+  assert.equal(GNFP_FRACTION_DIGITS, 10);
+  assert.equal(formatGnfp(1e-10), '0.0000000001');
+  assert.equal(formatGnfp(1), '1');
   assert.equal(TARGET_BLOCK_INTERVAL_MS, 90_000);
   assert.equal(PUBLIC_TX_PREVIEW, 10);
   assert.equal(POOL_FEE_BPS, 100);
   assert.equal(POOL_FEE_PAYOUT, 'gnfp18ff7e8b2f0ef3e96f598231638aafd5a5abc490c');
   assert.equal(poolFeePayout(), POOL_FEE_PAYOUT);
-  assert.equal(poolFeeNanos(), 10_000_000);
+  assert.equal(poolFeeNanos(), 100_000_000);
 });
 
-test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
+test('book law: sealed coinbase is 1 GNFP plus 1e-10 per hash', () => {
   assert.equal(sealedCoinbaseNanos({}), BLOCK_REWARD_NANOS);
   assert.equal(sealedCoinbaseGnfp({}), 1);
   assert.equal(sealedCoinbaseNanos({ a: 1, b: 3 }), BLOCK_REWARD_NANOS + 4);
@@ -76,7 +83,7 @@ test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
   assert.equal(hashesProvenByShare(14), 16384);
   assert.equal(retargetBits(0, 31, 90_000, {}), 31);
   assert.equal(BOOK_LAW_ID, 'gnfp-book-law-1');
-  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:1:100:16384:10:1:1:1:1:1');
+  assert.equal(bookLawFingerprint(), 'gnfp-book-law-1:90000:14:21:14:1:10000000000:1:100:16384:10:1:1:1:1:1');
   assert.equal(HASH_COMMIT_ON_ACCEPT, 1);
   assert.equal(HASH_TX_COLLATE, 1);
   assert.equal(HASH_TX_CONFIRM_ON_BLOCK, 1);
@@ -115,7 +122,7 @@ test('book law: sealed coinbase is 1 GNFP plus 1e-9 per hash', () => {
   assert.equal(tip.liveMinDifficultyBits, 14);
   assert.equal(tip.genesisDifficultyBits, 21);
   assert.equal(tip.blockIntervalMs, 90_000);
-  assert.equal(tip.hashBonusGnfp, 1e-9);
+  assert.equal(tip.hashBonusGnfp, 1e-10);
   assert.equal(HASH_TX_LIVE, 0);
   assert.equal(tip.hashTxLive, 0);
   const n = 12;
@@ -171,7 +178,7 @@ test('public tx preview shows amounts and never leaks wallets or IPs', () => {
   assert.equal(looksLikeSecretParty('coinbase'), false);
 });
 
-test('book law: per-hash bonus is 1e-9 GNFP and resets when a block forms', () => {
+test('book law: per-hash bonus is 1e-10 GNFP and resets when a block forms', () => {
   assert.equal(canFormBlock({ blockHashMet: false }), false);
   let window = emptyHashWindow();
   window = noteMinerHashes(window, 'alice', 10);
